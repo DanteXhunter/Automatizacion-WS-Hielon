@@ -46,22 +46,31 @@ Los datos capturados por el bot alimentarán en el futuro el ERP interno (fuera 
 
 WhatsApp le pertenece a Meta. La única vía legal para automatizar mensajería es la **WhatsApp Cloud API** de Meta (Graph API). Alternativas como Baileys o `whatsapp-web.js` violan los términos y llevan a baneo del número. No se usan.
 
-### 2. Regla de las 24 horas y plantillas HSM
+### 2. Regla de las 24 horas y plantillas (HSM)
 
-- Cuando el cliente escribe primero, se abre una **ventana de sesión de 24 h** donde el bot puede responder texto libre.
-- Fuera de esa ventana, solo se puede enviar **plantillas HSM (Highly Structured Messages)** pre-aprobadas por Meta.
-- **Consecuencia directa**: el recordatorio matutino de 6 am **debe ser una plantilla HSM aprobada**. Modificar el texto = re-aprobar (1 hora a 3 días).
-- **Costo**: conversaciones iniciadas por el negocio (utility) ≈ $0.033 USD; iniciadas por el cliente (service) son gratis desde nov 2024.
+- Cuando el cliente escribe primero, se abre una **ventana de sesión de 24 h** donde el bot puede responder **texto libre, sin plantilla, gratis** (categoría `service`).
+- Fuera de esa ventana, solo se puede enviar **plantillas** (HSM = Highly Structured Message, nombre técnico interno; en el panel de Meta aparece como "Message Template") pre-aprobadas.
+- **Consecuencia directa**: el recordatorio matutino de 6 am, al no tener ventana abierta, **debe ser una plantilla aprobada**, categoría `utility`. Modificar el texto = crear una plantilla nueva y re-aprobar (1 hora a 3 días).
+- **Categorías y costo en México** (base rate Meta, sin BSP, IVA no incluido):
+  - `service` (texto libre dentro de ventana): **gratis siempre**.
+  - `utility` (transaccional: recordatorio, confirmación, status): **gratis si se envía dentro de la ventana de 24h del cliente** (regla desde oct. 2025); **$0.008 USD/mensaje si la ventana ya cerró**.
+  - `marketing` (promocional, requiere opt-in específico): **$0.0436 USD/mensaje**, siempre (no hay descuento por estar en ventana).
+  - `authentication` (OTPs): **$0.0207 USD/mensaje**. No aplica a este proyecto.
+- **Importante**: la categoría se define por el **contenido** de la plantilla (Meta la revisa y puede reclasificar), no por a quién se le envía. Evitar lenguaje promocional ("oferta", "descuento", "aprovecha") en plantillas utility para no ser reclasificadas a marketing (5x más caro).
+- **Regla práctica de envío**: mensajes dentro de la conversación activa del bot (todo el flujo de captura de pedido) → siempre texto libre (`service`), nunca plantilla. Plantilla solo para lo que se envía sin que el cliente haya escrito recientemente (recordatorio matutino, o notificaciones sobre pedidos programados para otro día donde la ventana ya cerró).
+- **Límite de conversaciones iniciadas por el negocio**: 250 clientes únicos por ventana rodante de 24h sin verificar el negocio; sube a 1,000+ tras verificación (Tier 1). No es un cupo diario que se reinicia a medianoche — se libera de forma continua conforme pasan 24h desde cada envío.
 
 ### 3. Un número no puede estar en Cloud API y en la app WhatsApp Business a la vez
 
 Al registrar el número en Cloud API, se pierde el acceso desde la app móvil. Si Gabriel o un vendedor quiere responder desde ese mismo número, debe ser desde el panel que se construya. En v1 el handoff a humano se resuelve por Telegram/correo (ver sección de handoff).
 
-### 4. LFPDPPP (Ley Federal de Protección de Datos Personales, México)
+### 4. LFPDPPP (Ley Federal de Protección de Datos Personales, México) y opt-in
 
-- El cliente debe dar consentimiento explícito (opt-in) para recibir recordatorios proactivos.
-- Debe existir un aviso de privacidad accesible.
+- El cliente debe dar **consentimiento explícito documentado (opt-in)** para recibir mensajes proactivos del negocio. Se pide en el primer contacto del cliente nuevo y se guarda con fecha, hora, canal y texto exacto aceptado.
+- El opt-in para **marketing es distinto y adicional** al opt-in básico — se pregunta por separado ("¿deseas también recibir promociones?"). No usar el mismo consentimiento para ambos.
+- Debe existir un aviso de privacidad accesible (link que el bot pueda enviar si el cliente lo pide).
 - No se guardan datos sensibles en logs (números de tarjeta, etc.).
+- Sin opt-in documentado: riesgo legal (LFPDPPP) y riesgo de plataforma (reportes/bloqueos bajan el tier de calidad del número en Meta).
 
 ### 5. Race conditions — serialización por cliente
 
@@ -88,8 +97,9 @@ Meta puede reintentar entregar el mismo webhook. Cada mensaje trae un `message_i
 | Migraciones | **Alembic** | Estándar de facto en Python para versionar esquema. |
 | Driver DB | **asyncpg** | Driver async de Postgres. |
 | Cliente HTTP | **httpx** | Cliente HTTP async, moderno. Usar para llamar a Meta Cloud API. |
-| Automatizaciones | **n8n** | Cron matutino de recordatorios, futura sincronización con ERP. Auto-hospedable en Docker. |
-| Hosting | **AWS EC2** (v1) | Simple; el desarrollador ya ha usado AWS. |
+| Automatizaciones | **n8n** | Cron matutino de recordatorios, futura sincronización con ERP. Auto-hospedable. |
+| Hosting | **Railway** | Deploy automático desde GitHub, PostgreSQL incluido, HTTPS y subdominio gratis (`*.up.railway.app`) sin configuración manual. Elegido sobre AWS por ser desproporcionado en complejidad para el volumen del proyecto (30-50 pedidos/día); sin costo de dominio propio en v1. |
+| Dominio | Subdominio gratuito de Railway (v1) | No se compra dominio propio en v1; el webhook de Meta solo necesita un endpoint HTTPS válido, no importa si está indexado o tiene sitio web. Revisar dominio propio (~$12 USD/año) si el proyecto pasa a producción definitiva o si el grupo empresarial ya tiene uno registrado. |
 | Túnel para desarrollo | **ngrok** | Exponer localhost al webhook de Meta durante desarrollo. |
 | Testing | **pytest** + **pytest-asyncio** | Estándar de Python. |
 | Validación de datos | **Pydantic** | Ya viene con FastAPI. |
@@ -214,6 +224,7 @@ Meta puede reintentar entregar el mismo webhook. Cada mensaje trae un `message_i
 - `tipo` VARCHAR — `text`, `interactive`, `location`, `image`, etc.
 - `contenido` JSONB — payload crudo
 - `estado` VARCHAR NULLABLE — `sent`, `delivered`, `read`, `failed` (para salientes)
+- `pricing_category` VARCHAR NULLABLE — `service`, `utility`, `marketing`, `authentication`; se llena con el dato que Meta reporta en el webhook de status del mensaje saliente. Fuente para el dashboard de costos propio (ver Fase 6).
 - `created_at` TIMESTAMP
 
 ### Estados del pedido (transiciones válidas)
@@ -565,6 +576,12 @@ Cada fase se convierte en un **milestone**; cada bullet, en un **issue**.
 - [ ] Registro del envío en tabla de mensajes
 - [ ] Manejo de errores (cliente bloqueó, límite Meta, etc.)
 
+### Fase 6.1 — Dashboard de costos propio (semana 9-10)
+- [ ] Capturar `pricing_category` del webhook de status de Meta y guardarlo en `mensajes`
+- [ ] Endpoint FastAPI que agregue gasto por categoría y periodo (día/semana/mes)
+- [ ] Vista simple (Swagger o página HTML mínima) mostrando: total de mensajes por categoría, costo estimado acumulado, comparación contra el umbral de facturación de Meta
+- [ ] Alerta (Telegram) si el gasto mensual estimado supera un umbral configurable
+
 ### Backlog nice-to-have (sin sprint, futuro)
 - Pedido mínimo (20 bolsas)
 - Programar pedido para mañana
@@ -619,4 +636,6 @@ El usuario prefiere **guía paso a paso, no ejecución masiva**. Reglas:
 - **Race condition**: bug que ocurre cuando dos operaciones concurrentes acceden a un mismo recurso sin coordinación.
 - **Advisory lock (PostgreSQL)**: mecanismo de bloqueo cooperativo por clave arbitraria (aquí, cliente_id) para serializar el procesamiento de mensajes de un mismo cliente.
 - **BSP (Business Solution Provider)**: proveedor certificado por Meta que revende acceso al API con features adicionales (Twilio, 360dialog, etc.). En este proyecto NO se usa BSP; se integra directo con Cloud API.
-- **Opt-in**: consentimiento explícito del cliente para recibir mensajes proactivos. Obligatorio por LFPDPPP y política Meta.
+- **Opt-in**: consentimiento explícito del cliente para recibir mensajes proactivos. Obligatorio por LFPDPPP y política Meta. El opt-in para marketing es adicional y separado del opt-in básico.
+- **Pricing category**: clasificación (`service`, `utility`, `marketing`, `authentication`) que Meta asigna a cada mensaje saliente y reporta vía webhook; base para el dashboard de costos propio del proyecto.
+- **Ventana rodante (rolling window)**: el límite de conversaciones iniciadas por el negocio (250, 1000, etc.) no se reinicia a medianoche — se calcula sobre cualquier periodo de 24h hacia atrás desde el momento actual.
