@@ -34,9 +34,13 @@ Gracias por escribirnos. Nuestro horario es de lunes a sábado de 7:00 a
 Depende de la ventana de 24 horas:
 
 - Si el cliente escribió hace menos de 24 h, la sesión está abierta y se puede
-  mandar texto libre, que además es gratis
-- Si está cerrada, se requiere la plantilla `fuera_de_horario` (issue #8), que
-  sí cuesta
+  mandar texto libre
+- Si está cerrada, se requiere la plantilla `fuera_de_horario` (issue #8)
+
+**Ambas opciones cuestan lo mismo** desde el 1-oct-2026: MX$0.1565 por mensaje,
+categoría `service` o `utility` indistintamente. La ventana ya no decide el
+precio, solo **qué formato** se puede enviar. Elegir texto libre es una
+decisión de flexibilidad, no de ahorro.
 
 Comprobar `conversaciones.ultima_interaccion` para decidir. La ventana la abre
 el mensaje del **cliente**, y este mensaje que acaba de llegar la abre, así

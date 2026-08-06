@@ -1,6 +1,6 @@
 ## Depende de
 
-- #48 — bot de Telegram para el resumen
+- #48 — notificación por WhatsApp a Gabriel (mismo mecanismo de envío)
 - #64 — flow de envío al que se le agrega el manejo de errores
 
 ## Objetivo
@@ -24,17 +24,23 @@ entere del resultado sin revisar n8n manualmente.
 - Cada resultado (éxito o fallo) se acumula en un arreglo en vez de perderse
 - Al final del loop, un nodo que arma el resumen
 
-## Resumen final a Telegram
+## Resumen final a Gabriel
 
 ```
 Recordatorio matutino - 15 ago 2026
 Enviados: 87
 Fallidos: 3 (2 bloqueados, 1 timeout tras reintentos)
-Costo estimado: $2.87 USD
+Costo estimado: MX$13.62
 ```
 
-Reutiliza el mismo bot de Telegram del issue #48, con un chat o hilo separado
-para no mezclar alertas operativas de handoff con reportes de rutina.
+Se manda al WhatsApp de Gabriel con el mismo mecanismo del issue #48, pero con
+una **plantilla distinta** (`resumen_envio_matutino`, categoría utility). No se
+reutiliza `handoff_asesor` porque el copy es otro y Meta aprueba plantillas por
+contenido, no por destinatario.
+
+A diferencia de Telegram, aquí no hay "chat separado" para dividir alertas
+operativas de reportes de rutina: todo llega al mismo hilo. La separación se
+hace por el texto de la plantilla, que debe ser inconfundible de un vistazo.
 
 ## Caso especial: token vencido
 
@@ -47,5 +53,6 @@ rutina.
 
 - [ ] Un fallo individual no detiene el resto del loop
 - [ ] Un 401 detiene la corrida completa y alerta de inmediato
-- [ ] El resumen final llega a Telegram con conteos y costo estimado
+- [ ] El resumen final llega al WhatsApp de Gabriel con conteos y costo estimado
+- [ ] Plantilla `resumen_envio_matutino` aprobada en categoría utility
 - [ ] Probado forzando al menos un fallo simulado (número inválido)

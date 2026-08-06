@@ -22,7 +22,7 @@ automatizado (en el menú).
 ## Comportamiento al presionar
 
 1. Transicionar a `EN_ASESOR_HUMANO`
-2. Disparar la notificación de Telegram (issue #48) con motivo
+2. Disparar la notificación de WhatsApp a Gabriel (issue #48) con motivo
    `"escape_hatch"` y el estado desde el que se activó
 3. Responder al cliente:
 
@@ -34,7 +34,7 @@ Te comunico con un asesor, en un momento te atienden.
 
 Este es voluntario (el cliente lo pide); el del issue #30 es automático (tres
 entradas inválidas). Ambos llegan al mismo estado, pero el motivo que se
-reporta a Telegram es distinto para que Gabriel sepa si el cliente pidió
+reporta en la notificación es distinto para que Gabriel sepa si el cliente pidió
 ayuda o si el bot se atoró solo.
 
 ## Si viene desde REVISANDO_RESUMEN con un borrador activo

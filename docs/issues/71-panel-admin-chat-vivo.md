@@ -7,8 +7,9 @@ humano pueda responder directamente desde el mismo número del bot.
 
 Es la respuesta de largo plazo a la limitación central del proyecto: al
 registrar el número en Cloud API se pierde el acceso desde la app móvil de
-WhatsApp Business (ver issue #3). En v1 el handoff se resuelve por Telegram
-como notificación, pero un humano no puede "tomar" la conversación desde ahí;
+WhatsApp Business (ver issue #3). En v1 el handoff se resuelve con una
+notificación al WhatsApp personal de Gabriel, pero un humano no puede "tomar"
+la conversación desde ahí;
 solo se entera y decide qué hacer por fuera. Un panel con chat en vivo
 cerraría ese ciclo completo dentro del mismo sistema.
 

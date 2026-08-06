@@ -1,43 +1,65 @@
 ## Objetivo
 
-Crear el árbol de directorios documentado en `claude.md` para que cada archivo
-posterior tenga un lugar evidente donde vivir.
+Crear **únicamente** los archivos que la Fase 1 necesita, no el árbol completo.
 
-## Estructura
+## Decisión (6-ago-2026): estructura incremental
+
+El árbol documentado en `CLAUDE.md` es un **mapa de destino**, no una lista de
+creación. En disco solo existe lo que ya se usa.
+
+**Regla: un archivo nace cuando su ausencia duele.** Se escribe el código donde
+quepa, y cuando el archivo se pone incómodo, se extrae lo que corresponde.
+
+Por qué, dado que el objetivo del proyecto es aprender: 13 carpetas vacías con
+`__init__.py` no enseñan nada y producen la sensación de rellenar huecos de una
+plantilla ajena. El costo de mover código a su lugar definitivo después es
+trivial; el costo de la estructura prematura es no entender por qué existe cada
+separación.
+
+## Qué se crea en este issue
 
 ```
+.env.example
+.gitignore
+requirements.txt
 src/
-├── main.py              # entrada FastAPI
-├── config.py            # settings con Pydantic BaseSettings
-├── database.py          # engine y sesión async
-├── models/              # SQLModel, una clase por tabla
-├── schemas/             # Pydantic para request/response
-├── api/                 # routers (webhook, admin, health)
-├── whatsapp/            # client, signature, templates, messages
-├── fsm/                 # states, transitions, handlers/
-├── services/            # cliente_service, pedido_service, locks
-├── notifications/       # telegram
-└── utils/               # datetime, logging
+├── __init__.py
+├── main.py              # se llena en el issue #12
+└── config.py            # se llena en el issue #13
 tests/
-├── conftest.py
-├── unit/
-└── integration/
-docs/
-n8n/workflows/
+└── __init__.py
 ```
 
-## Por qué esta separación
+Nada más. `src/api/`, `src/whatsapp/` y `tests/unit/` nacen cuando su primer
+archivo lo necesite (issues #15 y #18).
 
-- `api/` solo traduce HTTP a llamadas de servicio; nada de lógica de negocio.
-- `fsm/` no sabe de HTTP ni de httpx; recibe un mensaje normalizado y decide
-  el siguiente estado. Eso lo hace testeable sin levantar servidor.
-- `whatsapp/` es el único módulo que conoce el formato de Meta. Si mañana
-  cambia la versión de la API, se toca un solo lugar.
+## Qué NO se crea, y en qué issue nace cada cosa
+
+| Carpeta | Nace en | Disparador |
+|---|---|---|
+| `src/api/` | #15 | primer endpoint del webhook |
+| `src/whatsapp/` | #18 | validación HMAC |
+| `tests/unit/` | #20 | primer test |
+| `src/models/`, `database.py` | #22 | primeras tablas SQLModel |
+| `src/fsm/` | #27 | enum de estados |
+| `src/services/` | #25 | `cliente_service` |
+| `src/utils/` | #32 | helpers de horario |
+| `src/notifications/` | #48 | handoff a Gabriel |
+| `src/schemas/` | cuando haga falta | puede que nunca en v1 |
+
+## Por qué `src/` y no la raíz
+
+Es el estándar de la industria en Python. La razón técnica de fondo
+(resolución de imports y el fallo "en mi máquina sí jala") se explica en la
+Fase 5, cuando se despliegue y el problema sea tangible. Aquí se adopta la
+convención sin necesidad de justificarla a fondo todavía.
 
 ## Criterio de aceptación
 
-- [ ] Todos los directorios creados con su `__init__.py` (13 en total)
-- [ ] `python -c "import src, src.models, src.fsm.handlers, src.whatsapp"` no truena
-- [ ] La estructura coincide con la documentada en `claude.md`
+- [ ] Existen exactamente los archivos listados arriba, ni uno más
+- [ ] `python -c "import src"` no truena
+- [ ] `.gitignore` incluye `.env`, `__pycache__/`, `.venv/`
+- [ ] No hay carpetas vacías con `__init__.py` "por si acaso"
 
-Nota: `src/main.py` no se verifica aquí, se crea en el issue #12.
+Nota: el contenido de `main.py` y `config.py` se escribe en los issues #12 y
+#13. Aquí solo se crean los archivos.

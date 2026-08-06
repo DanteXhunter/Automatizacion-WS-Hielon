@@ -29,8 +29,9 @@ desarrollo: en producción se usa gunicorn con workers uvicorn (Fase 5).
 
 ## Por qué un endpoint de health
 
-No es decorativo. Lo usan el healthcheck de Docker (Fase 5) y el reverse proxy
-para saber si el contenedor está vivo antes de mandarle tráfico. Debe ser
+No es decorativo. Lo usa Railway (Fase 5) para saber si el servicio quedó
+vivo antes de mandarle tráfico, y es lo primero que se consulta al depurar un
+deploy. Debe ser
 barato: no consulta la base de datos ni llama a Meta.
 
 ## Criterio de aceptación

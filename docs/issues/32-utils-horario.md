@@ -33,7 +33,7 @@ Usar `zoneinfo.ZoneInfo("America/Mexico_City")`, de la librería estándar desde
 Python 3.9. No usar `pytz`.
 
 **Trampa:** `datetime.now()` sin timezone devuelve la hora del sistema. En el
-contenedor de Docker (Fase 5) eso es **UTC**, que va 6 horas adelante de León.
+servidor de Railway (Fase 5) eso es **UTC**, que va 6 horas adelante de León.
 Un cliente escribiendo a las 12:00 del mediodía sería rechazado por "fuera de
 horario" porque el servidor cree que son las 18:00. Toda comparación de hora
 debe pasar por `ahora_local()`.

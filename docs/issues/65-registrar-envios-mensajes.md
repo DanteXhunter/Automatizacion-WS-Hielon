@@ -14,12 +14,31 @@ a cada cliente.
 Insertar en `mensajes`:
 
 ```sql
-INSERT INTO mensajes (cliente_id, direccion, whatsapp_message_id, tipo, contenido, estado)
-VALUES ($cliente_id, 'saliente', $message_id, 'template', $payload_json, 'sent');
+INSERT INTO mensajes (cliente_id, direccion, whatsapp_message_id, tipo, contenido,
+                      estado, pricing_category, costo_estimado, pedido_id)
+VALUES ($cliente_id, 'saliente', $message_id, 'template', $payload_json,
+        'sent', 'utility', $tarifa_utility_mxn, NULL);
 ```
 
 El `whatsapp_message_id` es el que devuelve Meta en la respuesta del envío,
 no uno inventado por n8n.
+
+`costo_estimado` se guarda como **snapshot** con la tarifa vigente al momento
+del envío, no se calcula después: las tarifas de Meta cambian y el histórico
+de gasto debe seguir siendo correcto tras un cambio de precio.
+
+`pedido_id` va en `NULL` porque el recordatorio no pertenece a ningún pedido
+todavía. Si el cliente responde y termina comprando, ese pedido tendrá sus
+propios mensajes; el recordatorio no debe contaminar la métrica MSPC.
+
+## Categoría real, según Meta
+
+El webhook de `statuses` incluye el objeto `pricing` con la categoría que Meta
+**efectivamente cobró**. Puede no coincidir con la esperada: si Meta
+reclasificó la plantilla a marketing, ahí se ve. Actualizar
+`pricing_category` y `costo_estimado` con ese dato cuando llegue.
+
+Esta es la fuente de verdad del dashboard de costos (Fase 6.1).
 
 ## Actualización del estado por webhooks de status
 
@@ -49,5 +68,7 @@ opt-in.
 - [ ] El webhook del backend actualiza el `estado` al recibir el evento
       `statuses` correspondiente
 - [ ] Un envío fallido queda visible con `estado = 'failed'`
+- [ ] `pricing_category` y `costo_estimado` quedan poblados en cada envío
+- [ ] La categoría se corrige si el webhook de status reporta una distinta
 - [ ] Verificado con al menos un ciclo real: enviado, entregado, marcado
       `delivered`

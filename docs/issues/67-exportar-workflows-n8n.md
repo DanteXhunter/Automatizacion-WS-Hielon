@@ -26,7 +26,7 @@ n8n/workflows/recordatorio_matutino.json
 
 n8n permite exportar workflows con las credenciales embebidas si no se
 configura bien. Revisar el JSON exportado y confirmar que las credenciales de
-Postgres, del bot de Telegram y de Meta **no** quedan en texto plano dentro
+Postgres y de Meta **no** quedan en texto plano dentro
 del archivo. n8n normalmente las referencia por ID de credencial guardada
 aparte en su propia base, no en el JSON del workflow; verificar que sea así
 antes de subirlo.

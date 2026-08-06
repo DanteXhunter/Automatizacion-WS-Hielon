@@ -26,7 +26,7 @@ ruff
 ```
 
 Fijar versiones con `pip freeze` una vez que todo corra, para que el despliegue
-en EC2 (Fase 5) instale exactamente lo mismo que en local.
+en Railway (Fase 5) instale exactamente lo mismo que en local.
 
 ## .env.example
 
@@ -38,12 +38,20 @@ WHATSAPP_ACCESS_TOKEN=EAAxxxxx
 WHATSAPP_PHONE_NUMBER_ID=123456789012345
 WHATSAPP_VERIFY_TOKEN=un_string_random_que_tu_inventas
 WHATSAPP_APP_SECRET=abc123
-TELEGRAM_BOT_TOKEN=123:ABC
-TELEGRAM_CHAT_ID=123456
+WHATSAPP_TELEFONO_ADMIN=+5214771234567
 HORA_INICIO=07:00
 HORA_FIN=17:00
 HORA_CORTE_MISMO_DIA=14:00
 TIMEZONE=America/Mexico_City
+
+# Tarifas Meta en MXN - modelo vigente desde 1-oct-2026.
+# Van en config y NO hardcodeadas: Meta las cambia y el historico de gasto
+# debe seguir siendo correcto despues de un cambio de precio.
+TARIFA_SERVICE_MXN=0.1565
+TARIFA_UTILITY_MXN=0.1565
+TARIFA_AUTHENTICATION_MXN=0.1565
+TARIFA_MARKETING_MXN=0.8000
+ALERTA_GASTO_MENSUAL_MXN=2000
 ```
 
 `WHATSAPP_VERIFY_TOKEN` lo inventas tú: es un string arbitrario que se

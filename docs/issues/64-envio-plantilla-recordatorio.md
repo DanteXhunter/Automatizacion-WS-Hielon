@@ -39,10 +39,13 @@ Items** con un **Wait** corto entre lotes (por ejemplo, 20 mensajes y pausa de
 
 ## Costo
 
-Cada envío exitoso es una conversación **utility** de aproximadamente 0.033
-USD. Con el flow corriendo diario, vale la pena que el resumen final (issue
-#66) reporte cuántos se enviaron, para llevar cuenta del gasto mensual real
-contra lo estimado.
+Cada envío exitoso es un mensaje **utility** de **MX$0.1565** (tarifa vigente
+desde 1-oct-2026; se cobra por mensaje, no por conversación).
+
+Con el flow corriendo diario, el resumen final (issue #66) debe reportar
+cuántos se enviaron para llevar cuenta del gasto real contra lo estimado. El
+costo se calcula con la tarifa de config (`TARIFA_UTILITY_MXN`), nunca
+hardcodeada: Meta cambia precios y el histórico debe seguir siendo correcto.
 
 ## Criterio de aceptación
 

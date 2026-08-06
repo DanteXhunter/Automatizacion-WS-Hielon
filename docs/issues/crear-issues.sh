@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Crea los 77 issues del proyecto en GitHub, uno por comando, leyendo el body
+# Crea los 89 issues del proyecto en GitHub, uno por comando, leyendo el body
 # desde su archivo .md correspondiente en docs/issues/.
 #
 # Uso:
@@ -15,7 +15,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 DESDE="${1:-1}"
-HASTA="${2:-77}"
+HASTA="${2:-89}"
 
 crear() {
   local numero="$1" titulo="$2" labels="$3" milestone="$4" archivo="$5"
@@ -36,6 +36,8 @@ M3="Fase 3 - Flujo de pedido completo"
 M4="Fase 4 - Handoff humano"
 M5="Fase 5 - Despliegue a produccion"
 M6="Fase 6 - Recordatorios proactivos"
+M35="Fase 3.5 - Optimizacion de mensajes salientes"
+M61="Fase 6.1 - Dashboard de costos"
 
 # --- Fase 0 ---
 crear 1  "Crear cuenta de Meta Business para Hielon"                  "setup,meta-api,legal"        "$M0" "01-crear-cuenta-meta-business.md"
@@ -93,7 +95,7 @@ crear 46 "Sugerencia de programar para manana despues de las 14:00"   "backend,f
 
 # --- Fase 4 ---
 crear 47 "Handler EN_ASESOR_HUMANO con bot silenciado"                "fsm,admin"                   "$M4" "47-handler-en-asesor-humano.md"
-crear 48 "Notificacion de handoff por Telegram"                       "admin,backend"               "$M4" "48-notificacion-telegram.md"
+crear 48 "Notificacion de handoff por WhatsApp a Gabriel"             "admin,backend"               "$M4" "48-notificacion-whatsapp-admin.md"
 crear 49 "Endpoint admin para cerrar el handoff"                      "admin,backend,seguridad"     "$M4" "49-endpoint-cerrar-handoff.md"
 crear 50 "Boton Hablar con asesor en menu y resumen"                  "fsm"                         "$M4" "50-boton-hablar-asesor.md"
 crear 51 "Endpoints admin de consulta de pedidos"                     "admin,backend"               "$M4" "51-endpoints-admin-pedidos.md"
@@ -102,15 +104,15 @@ crear 51 "Endpoints admin de consulta de pedidos"                     "admin,bac
 crear 52 "Aprender fundamentos de Docker"                             "docs,devops"                 "$M5" "52-aprender-docker.md"
 crear 53 "Dockerfile del backend"                                     "devops"                      "$M5" "53-dockerfile-backend.md"
 crear 54 "docker-compose con Postgres, backend y n8n"                 "devops"                      "$M5" "54-docker-compose.md"
-crear 55 "Provisionar la instancia EC2"                               "devops"                      "$M5" "55-provisionar-ec2.md"
-crear 56 "Dominio y HTTPS con Caddy o nginx"                          "devops,seguridad"            "$M5" "56-dominio-https.md"
+crear 55 "Provisionar el proyecto en Railway"                         "devops"                      "$M5" "55-provisionar-railway.md"
+crear 56 "HTTPS con el subdominio de Railway"                         "devops,seguridad"            "$M5" "56-https-subdominio-railway.md"
 crear 57 "Migrar el webhook de ngrok al dominio real"                 "meta-api,devops"             "$M5" "57-migrar-webhook-produccion.md"
 crear 58 "Logs estructurados en JSON"                                 "devops,backend"              "$M5" "58-logs-estructurados.md"
 crear 59 "Metricas basicas de operacion"                              "devops,backend"              "$M5" "59-metricas-basicas.md"
 crear 60 "Runbook de despliegue y respaldos"                          "docs,devops"                 "$M5" "60-runbook-despliegue.md"
 
 # --- Fase 6 ---
-crear 61 "Instalar n8n en Docker"                                     "n8n,devops"                  "$M6" "61-instalar-n8n-docker.md"
+crear 61 "Instalar n8n en Railway"                                    "n8n,devops"                  "$M6" "61-instalar-n8n.md"
 crear 62 "Flow con cron lunes a sabado a las 6:00"                    "n8n"                         "$M6" "62-flow-cron-6am.md"
 crear 63 "Query de clientes elegibles para recordatorio"              "n8n,db,legal"                "$M6" "63-query-clientes-elegibles.md"
 crear 64 "Envio de la plantilla recordatorio_matutino"                "n8n,meta-api"                "$M6" "64-envio-plantilla-recordatorio.md"
@@ -129,5 +131,21 @@ crear 74 "Silenciamiento por insistencia fuera de horario"            "backlog,b
 crear 75 "Multi-tenancy para Cerpomex y Fruvec"                       "backlog,db"                  ""    "75-multitenancy-grupo.md"
 crear 76 "Integracion con el ERP interno"                             "backlog,backend"             ""    "76-integracion-erp.md"
 crear 77 "Clasificacion de intencion con LLM"                         "backlog,backend"             ""    "77-llm-clasificacion-intencion.md"
+
+# --- Fase 3.5 (va despues de la Fase 3, antes de produccion) ---
+crear 78 "Instrumentar costo y categoria de cada mensaje saliente"    "backend,costos,db"           "$M35" "78-instrumentar-costos-mensajes.md"
+crear 79 "Medir el MSPC base del flujo actual"                       "backend,costos"              "$M35" "79-medir-mspc-base.md"
+crear 80 "Fusionar estados que caben en un solo mensaje"             "fsm,costos"                  "$M35" "80-fusionar-estados-mensajes.md"
+crear 81 "Evaluar Interactive List contra Reply Buttons"             "fsm,costos"                  "$M35" "81-interactive-list-vs-buttons.md"
+crear 82 "Atajo repetir pedido anterior para recurrentes"            "fsm,costos"                  "$M35" "82-atajo-repetir-pedido-anterior.md"
+crear 83 "Politica de no respuesta a entradas irrelevantes"          "fsm,costos"                  "$M35" "83-politica-no-respuesta.md"
+crear 84 "Re-medir MSPC y documentar el ahorro"                      "backend,costos,docs"         "$M35" "84-remedir-mspc-documentar-ahorro.md"
+
+# --- Fase 6.1 ---
+crear 85 "Endpoint de gasto por categoria y periodo"                 "backend,costos,admin"        "$M61" "85-endpoint-gasto-por-categoria.md"
+crear 86 "Endpoint de metrica MSPC"                                  "backend,costos,admin"        "$M61" "86-endpoint-metrica-mspc.md"
+crear 87 "Costo por cliente y deteccion de gasto sin venta"          "backend,costos,admin"        "$M61" "87-costo-por-cliente.md"
+crear 88 "Vista HTML del dashboard de costos"                        "backend,costos,admin"        "$M61" "88-vista-dashboard-costos.md"
+crear 89 "Alerta de gasto mensual al WhatsApp de Gabriel"            "backend,costos,alertas"      "$M61" "89-alerta-gasto-mensual.md"
 
 echo "Listo. Verifica con: gh issue list --limit 100"

@@ -29,12 +29,29 @@ Es mucho mejor que reventar a las 3 AM en el cron de recordatorios.
 | `whatsapp_phone_number_id` | str | sí |
 | `whatsapp_verify_token` | str | sí |
 | `whatsapp_app_secret` | SecretStr | sí |
-| `telegram_bot_token` | SecretStr | no |
-| `telegram_chat_id` | str | no |
+| `whatsapp_telefono_admin` | str | no |
 | `hora_inicio` | time | no, default 07:00 |
 | `hora_fin` | time | no, default 17:00 |
 | `hora_corte_mismo_dia` | time | no, default 14:00 |
 | `timezone` | str | no, default America/Mexico_City |
+| `tarifa_service_mxn` | Decimal | no, default 0.1565 |
+| `tarifa_utility_mxn` | Decimal | no, default 0.1565 |
+| `tarifa_authentication_mxn` | Decimal | no, default 0.1565 |
+| `tarifa_marketing_mxn` | Decimal | no, default 0.8000 |
+| `alerta_gasto_mensual_mxn` | Decimal | no, default 2000 |
+
+## Por qué las tarifas son configuración y no constantes
+
+Meta cambió el modelo de cobro el 1-oct-2026 y volverá a cambiarlo. Si las
+tarifas están hardcodeadas, actualizarlas obliga a un deploy y **reescribe
+retroactivamente el costo de los mensajes ya enviados** en cualquier cálculo
+que las lea. Como variable de entorno, se ajusta el valor sin tocar código y
+el `costo_estimado` ya guardado en `mensajes` (snapshot) conserva la tarifa
+que de verdad se pagó.
+
+`Decimal` y no `float`: son cantidades de dinero. `float` acumula error de
+redondeo binario y al sumar miles de mensajes el total deja de cuadrar con la
+factura de Meta.
 
 Exponer una instancia única cacheada con `@lru_cache`.
 

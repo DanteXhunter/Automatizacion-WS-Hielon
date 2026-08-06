@@ -32,11 +32,18 @@ mensaje para comenzar.
 
 - `{{1}}` = nombre del cliente
 
-## Costo
+## Costo (modelo vigente desde 1-oct-2026)
 
-Conversación utility iniciada por el negocio: aproximadamente **0.033 USD**.
-Con 100 clientes diarios de lunes a sábado son unos 85 USD al mes. Vale la
-pena tenerlo presente antes de activar el envío masivo.
+**MX$0.1565 por mensaje** enviado, categoría utility. Ya no se cobra por
+conversación abierta: se cobra cada mensaje saliente, uno por uno.
+
+Con 100 clientes de lunes a sábado: 2,600 mensajes/mes = **~MX$407/mes**, se
+traduzcan en pedido o no.
+
+Ese "o no" es el punto: un cliente que recibe 26 recordatorios y compra dos
+veces al mes cuesta MX$4.07 en recordatorios. Por eso la Fase 3.5 contempla
+segmentar el envío por patrón de compra en vez de mandarlo a todos a diario
+(ver "Presupuesto de mensajes" en CLAUDE.md).
 
 ## Criterio de aceptación
 

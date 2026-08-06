@@ -255,7 +255,7 @@ Meta puede reintentar entregar el mismo webhook. Cada mensaje trae un `message_i
        │  Webhook POST
        ▼
 ┌────────────────────────────────────────┐
-│   BACKEND FastAPI (AWS EC2)            │
+│   BACKEND FastAPI (Railway)            │
 │                                         │
 │  - Endpoint /webhook/whatsapp          │
 │  - Validación HMAC                     │
@@ -574,7 +574,7 @@ automatizacion-ws-hielon/
 └── docs/
     ├── setup-meta.md           ← paso a paso para dar de alta Meta Business
     ├── setup-local.md          ← cómo correr en local con ngrok
-    ├── deployment.md           ← despliegue en AWS
+    ├── deployment.md           ← despliegue en Railway
     └── plantillas-hsm.md       ← copy y variables de cada plantilla
 ```
 
@@ -696,14 +696,18 @@ Cada fase se convierte en un **milestone**; cada bullet, en un **issue**.
 - [ ] Botón "Hablar con asesor" en `MENU_PRINCIPAL` y `REVISANDO_RESUMEN`
 
 ### Fase 5 — Despliegue a producción (semana 8)
-- [ ] Aprender Docker fundamentos (2-3 días)
-- [ ] Dockerfile del backend
-- [ ] docker-compose.yml (Postgres + backend + n8n)
-- [ ] Provisionar EC2
-- [ ] Dominio + HTTPS con Let's Encrypt (nginx o Caddy)
-- [ ] Migrar webhook de ngrok al dominio real
+- [ ] Crear proyecto en Railway y conectar el repo de GitHub
+- [ ] Provisionar PostgreSQL en Railway y correr las migraciones de Alembic
+- [ ] Cargar variables de entorno en el panel de Railway (no hay `.env` en producción)
+- [ ] Verificar el subdominio HTTPS `*.up.railway.app` (TLS automático, sin nginx ni Let's Encrypt)
+- [ ] Migrar el webhook de Meta de la URL de ngrok a la de Railway
 - [ ] Configurar logs estructurados
 - [ ] Métricas básicas (mensajes/día, pedidos/día, errores)
+- [ ] Aprender Docker fundamentos (2-3 días) — **no bloquea el despliegue**; Railway construye sin Dockerfile. Se necesita para n8n en la Fase 6 y como base para la Fase 5.1.
+
+### Fase 5.1 — Contenerizar (opcional, después de estar en producción)
+- [ ] Dockerfile del backend — solo si se quiere control explícito del build o portabilidad fuera de Railway
+- [ ] docker-compose.yml para desarrollo local (Postgres + backend + n8n en una sola orden)
 
 ### Fase 6 — Recordatorios proactivos con n8n (semana 9)
 - [ ] Instalar n8n vía Docker
@@ -713,22 +717,26 @@ Cada fase se convierte en un **milestone**; cada bullet, en un **issue**.
 - [ ] Registro del envío en tabla de mensajes
 - [ ] Manejo de errores (cliente bloqueó, límite Meta, etc.)
 
-### Fase 6.1 — Dashboard de costos propio (semana 9-10)
-- [ ] Capturar `pricing_category` del webhook de status de Meta y guardarlo en `mensajes`
-- [ ] Calcular y guardar `costo_estimado` por mensaje saliente con la tarifa vigente en config
-- [ ] Endpoint FastAPI que agregue gasto por categoría y periodo (día/semana/mes)
-- [ ] **Métrica MSPC**: mensajes salientes por pedido completado, promedio y distribución; es el KPI de eficiencia del bot
-- [ ] Costo por pedido y costo por cliente; identificar clientes que consumen mensajes sin comprar
-- [ ] Vista simple (Swagger o página HTML mínima) mostrando: total de mensajes por categoría, costo estimado acumulado, comparación contra el umbral de facturación de Meta
-- [ ] Alerta al WhatsApp de Gabriel si el gasto mensual estimado supera un umbral configurable
-
 ### Fase 3.5 — Optimización de mensajes salientes (después de Fase 3, antes de producción)
-- [ ] Medir MSPC real del flujo implementado
-- [ ] Fusionar estados que pueden viajar en un solo mensaje (ver "Presupuesto de mensajes")
-- [ ] Evaluar Interactive List vs. Reply Buttons encadenados
-- [ ] Implementar atajo "repetir pedido anterior" para clientes recurrentes (mayor ahorro esperado)
-- [ ] Política de no-respuesta a entradas irrelevantes
-- [ ] Re-medir MSPC y documentar el ahorro
+
+**Nota de orden (6-ago-2026)**: la instrumentación de costos estaba originalmente en la Fase 6.1, pero esta fase *arranca midiendo* el MSPC y medir exige haber instrumentado antes. El issue #78 se adelantó aquí; los endpoints y la vista se quedan en la 6.1.
+
+- [ ] #78 — Instrumentar cada mensaje saliente con `pricing_category`, `costo_estimado` y `pedido_id`
+- [ ] #79 — Medir el MSPC base del flujo implementado (línea base en `docs/mspc-baseline.md`)
+- [ ] #80 — Fusionar estados que pueden viajar en un solo mensaje (ver "Presupuesto de mensajes")
+- [ ] #81 — Evaluar Interactive List vs. Reply Buttons encadenados
+- [ ] #82 — Atajo "repetir pedido anterior" para clientes recurrentes (**mayor ahorro esperado: -5 MSPC**)
+- [ ] #83 — Política de no-respuesta a entradas irrelevantes
+- [ ] #84 — Re-medir MSPC y documentar el ahorro; revertir lo que suba el abandono
+
+**Meta de la fase**: MSPC ≤ 5 para cliente nuevo, ≤ 3 para recurrente, sin que suba la tasa de abandono.
+
+### Fase 6.1 — Dashboard de costos propio (semana 9-10)
+- [ ] #85 — Endpoint que agregue gasto por categoría y periodo (día/semana/mes)
+- [ ] #86 — Endpoint de **métrica MSPC**: promedio, mediana, p90 y distribución; es el KPI de eficiencia del bot
+- [ ] #87 — Costo por cliente; identificar quién consume mensajes sin comprar
+- [ ] #88 — Vista HTML mínima: total por categoría, costo acumulado, proyección contra el umbral
+- [ ] #89 — Alerta al WhatsApp de Gabriel si el gasto mensual estimado supera el umbral configurable
 
 ### Backlog nice-to-have (sin sprint, futuro)
 - Pedido mínimo (20 bolsas)
@@ -780,6 +788,7 @@ El usuario prefiere **guía paso a paso, no ejecución masiva**. Reglas:
 
 ## Historial de cambios de este documento
 
+- **2026-08-06 (2)** — Barrido de consistencia sobre los 77 issues: handoff Telegram→WhatsApp (7 issues), despliegue AWS/EC2→Railway (8 issues, Docker degradado a Fase 5.1 opcional), pricing por mensaje de oct-2026 (6 issues), issue #10 recortado a estructura incremental. Resuelta la contradicción interna del propio CLAUDE.md (stack decía Railway, arquitectura y roadmap decían AWS). Creados 12 issues nuevos (#78-#89) para las Fases 3.5 y 6.1, que estaban en el roadmap sin archivos. La instrumentación de costos (#78) se movió de la Fase 6.1 a la 3.5 por dependencia circular: no se puede medir el MSPC sin haberlo instrumentado.
 - **2026-08-06** — Añadidas las secciones "Estado actual y riesgos" (baneo de Meta Business, fecha objetivo oct-2026) y "Cómo se construye el repositorio" (estructura incremental, issue 10 recortado a 5 archivos). Calibrado el nivel técnico real del desarrollador y registrados los conceptos ya comprendidos para no re-explicarlos. Handoff a humano cambiado de **Telegram a WhatsApp** (Gabriel no usa Telegram): requiere plantilla `handoff_asesor` de categoría utility. Añadido el formato de 4 preguntas por archivo nuevo.
 - **2026-08-05** — Reescrita la sección 2 al modelo de cobro por mensaje vigente desde el 1-oct-2026 (`service` deja de ser gratis; MX$0.1565/mensaje). Añadidas la sección 2.1 "Presupuesto de mensajes" con la métrica MSPC, la sección de alcance, la Fase 3.5 de optimización, campos `costo_estimado` y `pedido_id` en `mensajes`, y tarifas en variables de entorno. Documentada y descartada la categoría Meta Business Agent.
 

@@ -1,7 +1,14 @@
+> **Fase 5.1 — opcional, no bloquea producción (revisado 6-ago-2026).**
+> Railway construye y despliega desde el repo sin Dockerfile. Este issue dejó
+> de ser requisito para salir a producción y pasó a ser trabajo de aprendizaje
+> y de portabilidad: sirve para no quedar amarrado a un proveedor y para
+> levantar el stack completo en local. Hacerlo **después** de estar desplegado.
+
 ## Depende de
 
 Nada. Es formación; se puede hacer en paralelo a cualquier fase y conviene
-adelantarlo si hay tiempos muertos esperando a Meta.
+adelantarlo si hay tiempos muertos esperando a Meta. **Sigue siendo necesario**
+para el issue #61 (n8n) y para entender qué hace Railway por debajo.
 
 ## Objetivo
 
