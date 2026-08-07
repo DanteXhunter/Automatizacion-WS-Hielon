@@ -20,6 +20,28 @@ Este archivo es la memoria del proyecto. Contiene todo el contexto de negocio, d
 - Prefiere entender el panorama antes de saltar a herramientas.
 - Estilo de comunicación: español informal, directo, sin redundancia, con explicación de conceptos técnicos cuando se introducen.
 
+### Nivel técnico real (calibrado 6-ago-2026)
+
+- **Python**: sólido a nivel de lenguaje. Sabe qué es una clase, un diccionario, un módulo.
+- **Backend**: ha visto APIs y entiende el concepto de endpoint y CRUD, pero **nunca ha construido una desde cero**. Este es su primer backend real.
+- **Sin experiencia en**: producción/despliegue, tests (nunca ha escrito uno con pytest), async, Docker, PostgreSQL más allá de lo básico.
+- **Modo de trabajo acordado**: Claude escribe el código comentado y lo explica; el usuario lo estudia, lo corre y lo cuestiona. **No** escribe el código él desde cero — todavía.
+- **Prueba de avance acordada**: al terminar cada issue, el usuario debe poder explicar, sin abrir el código, qué hace ese archivo, por qué existe y qué se rompe si lo borra. Si no puede, no se avanza al siguiente issue.
+- **Estilo de aprendizaje**: cuestiona las analogías y encuentra sus contradicciones. No acepta explicaciones que salten pasos. Cuando dice "no entendí", el problema suele ser que se explicó **para qué sirve** algo en vez de **cómo funciona mecánicamente** — bajar un nivel de abstracción, no repetir con otras palabras.
+
+### Conceptos ya explicados y comprendidos (no re-explicar desde cero)
+
+Webhook y por qué existe (polling vs. push) · los dos canales HTTP separados (webhook de entrada / Graph API de salida) y quién es servidor en cada uno · GET de verificación vs. POST de mensajes · endpoint vs. petición · `async`/`await`, event loop, concurrencia vs. paralelismo, por qué no es "segundo plano" · proceso vs. programa · variables de entorno, `os.environ`, herencia del entorno, rol del `.env` vs. Railway · type hints y por qué Python los ignora · Pydantic, `BaseModel`, `BaseSettings`, `validate_call`, validación y conversión · herencia de clases.
+
+### Preguntas de arranque de cada issue
+
+El usuario pidió que **cada archivo nuevo** se presente respondiendo estas cuatro preguntas. Es el formato estándar del proyecto:
+
+1. ¿Qué va a contener?
+2. ¿Dónde vive y por qué ahí?
+3. ¿Por qué se le asignó ese nombre?
+4. ¿Por qué se crea en esta etapa y no antes o después?
+
 ## Sobre el negocio
 
 - **Empresa**: Hielon de León — startup de fabricación de hielo en León, Guanajuato, México.
@@ -40,6 +62,70 @@ Los datos capturados por el bot alimentarán en el futuro el ERP interno (fuera 
 
 ---
 
+## Alcance — qué es y qué NO es este proyecto
+
+**Este repo es el backend del bot de WhatsApp. Nada más.** Concretamente:
+
+**Dentro del alcance:**
+- Endpoint HTTPS público que recibe webhooks de Meta y valida su firma.
+- Máquina de estados que conduce la conversación y captura el pedido.
+- Persistencia en PostgreSQL de clientes, pedidos, conversaciones y mensajes.
+- Envío de mensajes salientes vía Meta Cloud API.
+- Notificación a un humano (WhatsApp) cuando el bot debe callarse.
+
+**Fuera del alcance — proyectos separados que consumirán esta base de datos:**
+- **ERP / panel administrativo con frontend.** Ver mensajes en tiempo real, chat en vivo del asesor humano, autenticación de usuarios internos, roles y permisos, catálogo, inventario, rutas de reparto. Es un segundo proyecto con su propio repo. Este backend debe dejarlo *posible* (datos bien modelados, endpoints admin limpios), no *implementarlo*.
+- **Integración con el ERP existente del grupo**, si lo hay.
+- **Multi-tenancy real** para Cerpomex y Fruvec. Se contempla en el modelo de datos, no se implementa en v1.
+
+**Por qué importa la separación**: el handoff a humano en v1 se resuelve por una notificación de WhatsApp a Gabriel precisamente porque el panel de chat en vivo es otro proyecto. Si se mezclan, ninguno de los dos se termina. La regla es: **este backend termina donde empieza la interfaz humana**.
+
+**Objetivo de negocio**, además del ahorro operativo: es una pieza de credibilidad comercial. Gabriel la muestra en juntas con restaurantes y hoteles como prueba de que Hielon es una operación seria y lista para atender volumen. Eso implica que el bot debe verse pulido y no fallar en la demo, aunque el volumen real todavía sea bajo.
+
+---
+
+## Estado actual y riesgos (6-ago-2026)
+
+**Fecha objetivo de entrega**: finales de agosto a mediados de octubre de 2026 (~10 semanas). Cuadra con el roadmap completo, incluyendo n8n y dashboard de costos.
+
+**Estado por fase:**
+- **Fase 0 — BLOQUEADA.** La cuenta de Meta Business existe pero **fue baneada por razones desconocidas**. Ticket de apelación levantado; respuesta esperada ~7-ago-2026.
+- **Fase 1 — desbloqueada y en curso.** El webhook, la validación HMAC, la config y los tests se desarrollan sin cuenta de Meta. Solo la prueba end-to-end con un mensaje real requiere la cuenta viva.
+
+**Riesgo #1 del proyecto: el baneo.** Las apelaciones de Meta Business a veces no se revierten y pueden tardar mucho más de lo prometido. Si no se recupera, el plan B es abrir cuenta con otro administrador o bajo otra razón social del grupo (Cerpomex, Fruvec). No dejar que este bloqueo detenga el desarrollo del backend.
+
+**Ya resuelto**: número dedicado adquirido; Gabriel sabe y aceptó que ese número pierde la app móvil de WhatsApp.
+
+**Pendiente de dato**: precio de lista de las bolsas de 3, 5 y 10 kg. Se necesita para calcular qué porcentaje del ticket representan los MX$1.10 de mensajería y decidir cuánto vale la pena optimizar (ver "Presupuesto de mensajes").
+
+---
+
+## Cómo se construye el repositorio — estructura incremental
+
+**Decisión (6-ago-2026): la estructura de carpetas NO se crea completa de golpe.** El issue 10 se recortó.
+
+El árbol completo documentado más abajo es un **mapa de destino**, no una tarea de creación. En disco solo existe lo que ya se usa.
+
+**Regla: un archivo nace cuando su ausencia duele.** Se escribe el código donde quepa, y cuando el archivo se pone incómodo, se extrae lo que corresponde. Así se entiende *por qué* existe cada separación en vez de rellenar huecos de una plantilla.
+
+**Por qué**, dado que el objetivo es aprender: 30 carpetas vacías con `__init__.py` no enseñan nada y producen la sensación de trabajar dentro de un molde ajeno. El costo de mover código a su lugar definitivo después es trivial; el costo de la estructura prematura es no aprender.
+
+**Fase 1 — archivos que sí existen** (5, nada más):
+
+```
+src/main.py                 ← ensamblaje de la app FastAPI
+src/config.py               ← Settings con Pydantic BaseSettings
+src/api/webhook.py          ← GET de verificación + POST de mensajes
+src/whatsapp/signature.py   ← validación HMAC (función pura, testeable)
+src/whatsapp/client.py      ← wrapper httpx sobre la Graph API
+```
+
+`models/`, `fsm/`, `services/`, `notifications/`, `utils/` **no existen** hasta que su fase los necesite.
+
+**Layout `src/`**: se adopta porque es el estándar de la industria en Python. La razón técnica de fondo (resolución de imports y el fallo "en mi máquina sí jala") se explica en la Fase 5, cuando se despliegue y el problema sea tangible. Pendiente explícitamente diferido, no olvidado.
+
+---
+
 ## Restricciones técnicas críticas — leer antes de tocar código
 
 ### 1. Meta Cloud API — un solo canal legítimo
@@ -51,18 +137,59 @@ WhatsApp le pertenece a Meta. La única vía legal para automatizar mensajería 
 - Cuando el cliente escribe primero, se abre una **ventana de sesión de 24 h** donde el bot puede responder **texto libre, sin plantilla, gratis** (categoría `service`).
 - Fuera de esa ventana, solo se puede enviar **plantillas** (HSM = Highly Structured Message, nombre técnico interno; en el panel de Meta aparece como "Message Template") pre-aprobadas.
 - **Consecuencia directa**: el recordatorio matutino de 6 am, al no tener ventana abierta, **debe ser una plantilla aprobada**, categoría `utility`. Modificar el texto = crear una plantilla nueva y re-aprobar (1 hora a 3 días).
+- **Modelo de cobro vigente para este proyecto — el de 1 de octubre de 2026.** Todo el sistema se diseña contra este modelo, no contra el anterior. El modelo viejo ("todo gratis dentro de la ventana de 24h") muere el 30 de septiembre de 2026; construir sobre él sería construir algo con dos meses de vida útil.
 - **Categorías y costo en México** (base rate Meta, sin BSP, IVA no incluido):
-  - `service` (texto libre dentro de ventana): **gratis siempre**.
-  - `utility` (transaccional: recordatorio, confirmación, status): **gratis si se envía dentro de la ventana de 24h del cliente** (regla desde oct. 2025); **$0.008 USD/mensaje si la ventana ya cerró**.
-  - `marketing` (promocional, requiere opt-in específico): **$0.0436 USD/mensaje**, siempre (no hay descuento por estar en ventana).
-  - `authentication` (OTPs): **$0.0207 USD/mensaje**. No aplica a este proyecto.
+
+  | Categoría | Qué es | Costo desde 1-oct-2026 |
+  |---|---|---|
+  | `service` | Texto libre dentro de la ventana de 24h (todo el flujo del bot) | **MX$0.1565 / mensaje** (~USD $0.0085) |
+  | `utility` | Transaccional: recordatorio, confirmación, status | **MX$0.1565 / mensaje**, dentro o fuera de ventana |
+  | `authentication` | OTPs. No aplica a este proyecto | **MX$0.1565 / mensaje** |
+  | `marketing` | Promocional, requiere opt-in específico | **~USD $0.0436 / mensaje** (~5x más caro) |
+  | `Meta Business Agent` | IA propia de Meta que procesa y responde el mensaje por ti. Cobro doble: tokens (~USD $2.00 / millón) + el envío | **No se usa en este proyecto** |
+
+- **Lo que cambia respecto al modelo anterior**: antes cada conversación tenía un costo de apertura y el resto de los mensajes de la ventana eran gratis. Ahora **se cobra por mensaje saliente, uno por uno, sin importar la ventana**. `service` deja de ser gratis y pasa a costar lo mismo que `utility`. Meta ya no da descuento por volumen en `service`: la tarifa es plana.
+- **Consecuencia de arquitectura, no de contabilidad**: cada mensaje que el bot envía es dinero. El diseño de la FSM deja de optimizarse solo por claridad conversacional y pasa a optimizarse por **mensajes salientes por pedido completado**. Ver "Presupuesto de mensajes" abajo.
+- **Meta Business Agent** (quinta categoría, activa desde el 1 de agosto de 2026): Meta intercepta el mensaje, lo procesa con su propio LLM y genera la respuesta. Se descarta explícitamente: cobra dos veces (procesamiento por tokens + envío), y el objetivo del proyecto es una FSM determinista bajo nuestro control, no delegar la conversación a un tercero.
 - **Importante**: la categoría se define por el **contenido** de la plantilla (Meta la revisa y puede reclasificar), no por a quién se le envía. Evitar lenguaje promocional ("oferta", "descuento", "aprovecha") en plantillas utility para no ser reclasificadas a marketing (5x más caro).
-- **Regla práctica de envío**: mensajes dentro de la conversación activa del bot (todo el flujo de captura de pedido) → siempre texto libre (`service`), nunca plantilla. Plantilla solo para lo que se envía sin que el cliente haya escrito recientemente (recordatorio matutino, o notificaciones sobre pedidos programados para otro día donde la ventana ya cerró).
+- **Regla práctica de envío**: mensajes dentro de la conversación activa del bot (todo el flujo de captura de pedido) → siempre texto libre (`service`), nunca plantilla. Plantilla solo para lo que se envía sin que el cliente haya escrito recientemente (recordatorio matutino, o notificaciones sobre pedidos programados para otro día donde la ventana ya cerró). Esto ya **no** se hace por ahorro (cuestan igual) sino porque fuera de ventana la plantilla es obligatoria.
+- **Los mensajes entrantes no se cobran.** Solo se paga lo que el negocio envía. Cualquier estrategia de ahorro consiste en reducir mensajes salientes, nunca en limitar lo que el cliente escribe.
 - **Límite de conversaciones iniciadas por el negocio**: 250 clientes únicos por ventana rodante de 24h sin verificar el negocio; sube a 1,000+ tras verificación (Tier 1). No es un cupo diario que se reinicia a medianoche — se libera de forma continua conforme pasan 24h desde cada envío.
+
+### 2.1 Presupuesto de mensajes — restricción de diseño de primera clase
+
+**Métrica del proyecto: mensajes salientes por pedido completado (MSPC).** Se mide, se reporta en el dashboard de costos (Fase 6.1) y se usa para aceptar o rechazar cambios en la FSM.
+
+Cálculo del flujo tal como está diseñado hoy (cliente conocido, un solo producto, sin errores):
+
+| # | Mensaje saliente | Estado |
+|---|---|---|
+| 1 | Saludo + menú principal | `IDLE` → `MENU_PRINCIPAL` |
+| 2 | Botones de producto | `SELECCIONANDO_PRODUCTO` |
+| 3 | "¿Cuántas bolsas?" | `CAPTURANDO_CANTIDAD` |
+| 4 | Carrito + ¿agregar más? | `AGREGAR_MAS_O_CONTINUAR` |
+| 5 | ¿Qué dirección? | `CAPTURANDO_DIRECCION` |
+| 6 | Resumen + confirmar | `REVISANDO_RESUMEN` |
+| 7 | "Pedido #2026-0142 confirmado" | → `IDLE` |
+
+**7 mensajes = MX$1.10 por pedido**, en el mejor caso. Con un error de captura o un "volver" sube a 9-10. A 40 pedidos/día × 26 días: **~MX$1,150/mes solo en el flujo de pedido**, más los recordatorios matutinos (50 clientes × 26 días × MX$0.1565 = **MX$203/mes**, se pague o no con pedido).
+
+Bajo el modelo anterior esto costaba casi nada. Bajo el nuevo, es un gasto operativo real que hay que justificar frente al costo de que una persona tome el pedido.
+
+**Estrategias de reducción a evaluar antes de escribir los handlers de la Fase 3** (ninguna está cerrada todavía; se decide con datos, no por intuición):
+
+1. **Fusionar estados en un solo mensaje.** El mensaje de WhatsApp admite `body` largo + botones. `AGREGAR_MAS_O_CONTINUAR` y `CAPTURANDO_DIRECCION` pueden viajar juntos; el resumen y la confirmación también. Objetivo realista: bajar de 7 a 4-5.
+2. **Interactive List en vez de Reply Buttons encadenados.** Una List Message soporta hasta 10 opciones en un solo envío: producto y cantidad frecuente ("5 kg × 10") pueden ser una sola selección en vez de dos mensajes.
+3. **Atajo para el cliente recurrente.** Si el cliente tiene un pedido anterior, el primer mensaje ya ofrece "¿Repetimos lo de siempre: 10 bolsas de 5 kg a la dirección X?" con botones Sí/Cambiar. Camino feliz de **2 mensajes** en vez de 7. Este es el ahorro más grande y encaja con el perfil de clientela (mayoristas recurrentes).
+4. **No responder a todo.** Entradas inválidas no siempre merecen un mensaje de error propio; se puede reenviar el prompt con la corrección incluida, y no responder nada a mensajes irrelevantes dentro de la ventana.
+5. **Recordatorio matutino segmentado, no masivo.** En vez de mandarlo a todos los clientes con opt-in cada día, mandarlo según patrón de compra (frecuencia histórica, días que suele pedir). Un cliente que compra los martes no necesita 6 recordatorios semanales.
+6. **Batching de confirmaciones.** Notificaciones de status (en ruta, entregado) agrupadas o suprimidas si el cliente no las pidió.
+
+**Regla de revisión**: cada issue de la Fase 3 que agregue un mensaje saliente al flujo debe declarar en su descripción el delta de MSPC y por qué se justifica.
 
 ### 3. Un número no puede estar en Cloud API y en la app WhatsApp Business a la vez
 
-Al registrar el número en Cloud API, se pierde el acceso desde la app móvil. Si Gabriel o un vendedor quiere responder desde ese mismo número, debe ser desde el panel que se construya. En v1 el handoff a humano se resuelve por Telegram/correo (ver sección de handoff).
+Al registrar el número en Cloud API, se pierde el acceso desde la app móvil. Si Gabriel o un vendedor quiere responder desde ese mismo número, debe ser desde el panel que se construya. En v1 el handoff a humano se resuelve notificando al WhatsApp personal de Gabriel (ver sección de handoff).
 
 ### 4. LFPDPPP (Ley Federal de Protección de Datos Personales, México) y opt-in
 
@@ -128,7 +255,7 @@ Meta puede reintentar entregar el mismo webhook. Cada mensaje trae un `message_i
        │  Webhook POST
        ▼
 ┌────────────────────────────────────────┐
-│   BACKEND FastAPI (AWS EC2)            │
+│   BACKEND FastAPI (Railway)            │
 │                                         │
 │  - Endpoint /webhook/whatsapp          │
 │  - Validación HMAC                     │
@@ -224,7 +351,9 @@ Meta puede reintentar entregar el mismo webhook. Cada mensaje trae un `message_i
 - `tipo` VARCHAR — `text`, `interactive`, `location`, `image`, etc.
 - `contenido` JSONB — payload crudo
 - `estado` VARCHAR NULLABLE — `sent`, `delivered`, `read`, `failed` (para salientes)
-- `pricing_category` VARCHAR NULLABLE — `service`, `utility`, `marketing`, `authentication`; se llena con el dato que Meta reporta en el webhook de status del mensaje saliente. Fuente para el dashboard de costos propio (ver Fase 6).
+- `pricing_category` VARCHAR NULLABLE — `service`, `utility`, `marketing`, `authentication`; se llena con el dato que Meta reporta en el webhook de status del mensaje saliente. Fuente para el dashboard de costos propio (ver Fase 6.1).
+- `costo_estimado` DECIMAL NULLABLE — costo en MXN del mensaje saliente al momento del envío, calculado con la tarifa vigente en config. Se guarda como snapshot porque las tarifas de Meta cambian y el histórico de gasto debe seguir siendo correcto después de un cambio de precio.
+- `pedido_id` UUID FK NULLABLE — permite calcular el MSPC (mensajes salientes por pedido completado) atribuyendo cada mensaje a la conversación de pedido que lo originó.
 - `created_at` TIMESTAMP
 
 ### Estados del pedido (transiciones válidas)
@@ -350,7 +479,8 @@ Reply Buttons:
 #### `EN_ASESOR_HUMANO`
 - El bot **no responde** mientras esté en este estado.
 - Todos los mensajes entrantes se guardan en `mensajes`.
-- Se dispara notificación a Gabriel (Telegram bot o correo) con: número del cliente, últimos mensajes, motivo (regateo, escape hatch, etc.).
+- Se dispara notificación al **WhatsApp personal de Gabriel** con: número del cliente, últimos mensajes, motivo (regateo, escape hatch, etc.). Como Gabriel nunca le escribe al bot, nunca hay ventana de 24h abierta con él: la notificación **debe ser plantilla `utility` aprobada** (`handoff_asesor`). Costo MX$0.1565 por handoff, despreciable.
+- **Decisión revisada (6-ago-2026)**: originalmente era Telegram; se cambió a WhatsApp porque Gabriel no usa Telegram. Una notificación que llega a una app que el destinatario no abre no sirve de nada.
 - Al cerrar el chat manualmente (endpoint admin), el estado vuelve a `IDLE`.
 
 #### Nota sobre `FUERA_DE_HORARIO`
@@ -425,8 +555,8 @@ automatizacion-ws-hielon/
 │   │   ├── cliente_service.py
 │   │   ├── pedido_service.py
 │   │   └── locks.py            ← advisory locks por cliente_id
-│   ├── notifications/          ← handoff a humano (Telegram/correo)
-│   │   └── telegram.py
+│   ├── notifications/          ← handoff a humano (WhatsApp a Gabriel)
+│   │   └── whatsapp_admin.py
 │   └── utils/
 │       ├── datetime.py         ← manejo de horario laboral, TZ America/Mexico_City
 │       └── logging.py
@@ -444,7 +574,7 @@ automatizacion-ws-hielon/
 └── docs/
     ├── setup-meta.md           ← paso a paso para dar de alta Meta Business
     ├── setup-local.md          ← cómo correr en local con ngrok
-    ├── deployment.md           ← despliegue en AWS
+    ├── deployment.md           ← despliegue en Railway
     └── plantillas-hsm.md       ← copy y variables de cada plantilla
 ```
 
@@ -488,12 +618,19 @@ WHATSAPP_ACCESS_TOKEN=
 WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_APP_SECRET=       ← para validar HMAC del webhook
-TELEGRAM_BOT_TOKEN=        ← notificación de handoff
-TELEGRAM_CHAT_ID=          ← chat de Gabriel/equipo
+WHATSAPP_TELEFONO_ADMIN=   ← WhatsApp personal de Gabriel, para notificar handoff
 HORA_INICIO=07:00
 HORA_FIN=17:00
 HORA_CORTE_MISMO_DIA=14:00
 TIMEZONE=America/Mexico_City
+
+# Tarifas Meta en MXN — modelo vigente desde 1-oct-2026.
+# Van en config, NO hardcodeadas: Meta las cambia y el histórico debe seguir siendo correcto.
+TARIFA_SERVICE_MXN=0.1565
+TARIFA_UTILITY_MXN=0.1565
+TARIFA_AUTHENTICATION_MXN=0.1565
+TARIFA_MARKETING_MXN=0.8000
+ALERTA_GASTO_MENSUAL_MXN=2000
 ```
 
 ---
@@ -554,19 +691,23 @@ Cada fase se convierte en un **milestone**; cada bullet, en un **issue**.
 
 ### Fase 4 — Handoff humano (semana 7)
 - [ ] Handler `EN_ASESOR_HUMANO` (bot silenciado)
-- [ ] Integración con Telegram Bot para notificar
+- [ ] Registrar plantilla `handoff_asesor` (utility) y notificar al WhatsApp de Gabriel
 - [ ] Endpoint admin `POST /admin/conversaciones/{id}/cerrar-handoff`
 - [ ] Botón "Hablar con asesor" en `MENU_PRINCIPAL` y `REVISANDO_RESUMEN`
 
 ### Fase 5 — Despliegue a producción (semana 8)
-- [ ] Aprender Docker fundamentos (2-3 días)
-- [ ] Dockerfile del backend
-- [ ] docker-compose.yml (Postgres + backend + n8n)
-- [ ] Provisionar EC2
-- [ ] Dominio + HTTPS con Let's Encrypt (nginx o Caddy)
-- [ ] Migrar webhook de ngrok al dominio real
+- [ ] Crear proyecto en Railway y conectar el repo de GitHub
+- [ ] Provisionar PostgreSQL en Railway y correr las migraciones de Alembic
+- [ ] Cargar variables de entorno en el panel de Railway (no hay `.env` en producción)
+- [ ] Verificar el subdominio HTTPS `*.up.railway.app` (TLS automático, sin nginx ni Let's Encrypt)
+- [ ] Migrar el webhook de Meta de la URL de ngrok a la de Railway
 - [ ] Configurar logs estructurados
 - [ ] Métricas básicas (mensajes/día, pedidos/día, errores)
+- [ ] Aprender Docker fundamentos (2-3 días) — **no bloquea el despliegue**; Railway construye sin Dockerfile. Se necesita para n8n en la Fase 6 y como base para la Fase 5.1.
+
+### Fase 5.1 — Contenerizar (opcional, después de estar en producción)
+- [ ] Dockerfile del backend — solo si se quiere control explícito del build o portabilidad fuera de Railway
+- [ ] docker-compose.yml para desarrollo local (Postgres + backend + n8n en una sola orden)
 
 ### Fase 6 — Recordatorios proactivos con n8n (semana 9)
 - [ ] Instalar n8n vía Docker
@@ -576,11 +717,26 @@ Cada fase se convierte en un **milestone**; cada bullet, en un **issue**.
 - [ ] Registro del envío en tabla de mensajes
 - [ ] Manejo de errores (cliente bloqueó, límite Meta, etc.)
 
+### Fase 3.5 — Optimización de mensajes salientes (después de Fase 3, antes de producción)
+
+**Nota de orden (6-ago-2026)**: la instrumentación de costos estaba originalmente en la Fase 6.1, pero esta fase *arranca midiendo* el MSPC y medir exige haber instrumentado antes. El issue #79 se adelantó aquí; los endpoints y la vista se quedan en la 6.1.
+
+- [ ] #79 — Instrumentar cada mensaje saliente con `pricing_category`, `costo_estimado` y `pedido_id`
+- [ ] #80 — Medir el MSPC base del flujo implementado (línea base en `docs/mspc-baseline.md`)
+- [ ] #81 — Fusionar estados que pueden viajar en un solo mensaje (ver "Presupuesto de mensajes")
+- [ ] #82 — Evaluar Interactive List vs. Reply Buttons encadenados
+- [ ] #83 — Atajo "repetir pedido anterior" para clientes recurrentes (**mayor ahorro esperado: -5 MSPC**)
+- [ ] #84 — Política de no-respuesta a entradas irrelevantes
+- [ ] #85 — Re-medir MSPC y documentar el ahorro; revertir lo que suba el abandono
+
+**Meta de la fase**: MSPC ≤ 5 para cliente nuevo, ≤ 3 para recurrente, sin que suba la tasa de abandono.
+
 ### Fase 6.1 — Dashboard de costos propio (semana 9-10)
-- [ ] Capturar `pricing_category` del webhook de status de Meta y guardarlo en `mensajes`
-- [ ] Endpoint FastAPI que agregue gasto por categoría y periodo (día/semana/mes)
-- [ ] Vista simple (Swagger o página HTML mínima) mostrando: total de mensajes por categoría, costo estimado acumulado, comparación contra el umbral de facturación de Meta
-- [ ] Alerta (Telegram) si el gasto mensual estimado supera un umbral configurable
+- [ ] #86 — Endpoint que agregue gasto por categoría y periodo (día/semana/mes)
+- [ ] #87 — Endpoint de **métrica MSPC**: promedio, mediana, p90 y distribución; es el KPI de eficiencia del bot
+- [ ] #88 — Costo por cliente; identificar quién consume mensajes sin comprar
+- [ ] #89 — Vista HTML mínima: total por categoría, costo acumulado, proyección contra el umbral
+- [ ] #90 — Alerta al WhatsApp de Gabriel si el gasto mensual estimado supera el umbral configurable
 
 ### Backlog nice-to-have (sin sprint, futuro)
 - Pedido mínimo (20 bolsas)
@@ -608,6 +764,10 @@ El usuario prefiere **guía paso a paso, no ejecución masiva**. Reglas:
 6. **Cuestionar decisiones del usuario cuando sean técnicamente débiles**, con fundamento. El usuario valora crítica honesta sobre validación superficial.
 7. **Costo de tokens es una preocupación**. Respuestas densas, sin bullets de relleno, sin repetir contexto ya establecido en este documento.
 8. **Verificar contra este documento antes de proponer alternativas al stack.** Las decisiones aquí están cerradas salvo aviso.
+9. **El objetivo declarado del usuario es aprender a construir esto, no tener esto construido.** No entregar archivos terminados para que los copie. El patrón correcto por issue es: (a) explicar el problema que el archivo resuelve y por qué existe como archivo separado, (b) mostrar la forma de la solución, (c) dejar que él escriba el cuerpo, (d) revisar y corregir con fundamento. Si él pide directamente el código completo, dárselo, pero acompañado de la explicación de por qué está así.
+10. **Preferir enseñar el patrón general sobre la solución particular.** Cuando aparezca algo replicable (webhook, FSM, lock, idempotencia), nombrarlo, decir dónde más se usa en la industria y qué falla si se hace mal. El usuario quiere poder repetir esto en otro proyecto.
+11. **No inventar tarifas ni políticas de Meta.** Cambian seguido. Verificar contra la documentación oficial de pricing antes de afirmar un número, y actualizar la sección 2 de este documento con la fecha de verificación.
+12. **Convención "COCHABAMBA" (7-ago-2026).** Cuando el usuario escriba la palabra `COCHABAMBA`, Claude entrega en el chat, solo como texto: (a) título de commit, (b) cuerpo del PR con el formato "¿Qué hace este PR?" / "Issues que cierra" / "Resultado de prueba" / "Notas", (c) el comando para crear la rama del siguiente issue. **No ejecutar** `git commit`, `git push` ni `gh pr create` al recibir este trigger — el usuario revisa y corre todo manualmente. Es su repositorio y su flujo de revisión; publicar por su cuenta le quita control sobre qué llega a `origin`.
 
 ---
 
@@ -623,6 +783,16 @@ El usuario prefiere **guía paso a paso, no ejecución masiva**. Reglas:
 8. PostgreSQL advisory locks: https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS
 9. n8n docs: https://docs.n8n.io/
 10. LFPDPPP (México): https://www.diputados.gob.mx/LeyesBiblio/pdf/LFPDPPP.pdf
+11. **Pricing oficial de WhatsApp Business Platform** (fuente de verdad de tarifas, revisar antes de tocar la sección 2): https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing
+
+---
+
+## Historial de cambios de este documento
+
+- **2026-08-06 (3)** — Sincronizados los 89 issues locales con GitHub: actualizado el body de 66 issues existentes que seguían con el contenido pre-barrido (Telegram, AWS/EC2, Caddy), y creados los 12 issues de las Fases 3.5 y 6.1 (previamente solo existían como archivo local, sin issue real en GitHub). Al crearlos, GitHub tenía el número #78 ocupado por un pull request ya mergeado, así que la numeración real quedó corrida +1: **los issues de las Fases 3.5 y 6.1 son #79-#90 en GitHub, no #78-#89.** Se renombraron los archivos en `docs/issues/` y se actualizaron sus referencias cruzadas internas y `crear-issues.sh` para reflejar la numeración real. Los 89 issues (todo salvo el PR #78) quedaron asignados al tablero del proyecto.
+- **2026-08-06 (2)** — Barrido de consistencia sobre los 77 issues: handoff Telegram→WhatsApp (7 issues), despliegue AWS/EC2→Railway (8 issues, Docker degradado a Fase 5.1 opcional), pricing por mensaje de oct-2026 (6 issues), issue #10 recortado a estructura incremental. Resuelta la contradicción interna del propio CLAUDE.md (stack decía Railway, arquitectura y roadmap decían AWS). Creados 12 issues nuevos (#78-#89 en el plan original; ver entrada de arriba para la numeración real) para las Fases 3.5 y 6.1, que estaban en el roadmap sin archivos. La instrumentación de costos se movió de la Fase 6.1 a la 3.5 por dependencia circular: no se puede medir el MSPC sin haberlo instrumentado.
+- **2026-08-06** — Añadidas las secciones "Estado actual y riesgos" (baneo de Meta Business, fecha objetivo oct-2026) y "Cómo se construye el repositorio" (estructura incremental, issue 10 recortado a 5 archivos). Calibrado el nivel técnico real del desarrollador y registrados los conceptos ya comprendidos para no re-explicarlos. Handoff a humano cambiado de **Telegram a WhatsApp** (Gabriel no usa Telegram): requiere plantilla `handoff_asesor` de categoría utility. Añadido el formato de 4 preguntas por archivo nuevo.
+- **2026-08-05** — Reescrita la sección 2 al modelo de cobro por mensaje vigente desde el 1-oct-2026 (`service` deja de ser gratis; MX$0.1565/mensaje). Añadidas la sección 2.1 "Presupuesto de mensajes" con la métrica MSPC, la sección de alcance, la Fase 3.5 de optimización, campos `costo_estimado` y `pedido_id` en `mensajes`, y tarifas en variables de entorno. Documentada y descartada la categoría Meta Business Agent.
 
 ---
 
@@ -637,5 +807,8 @@ El usuario prefiere **guía paso a paso, no ejecución masiva**. Reglas:
 - **Advisory lock (PostgreSQL)**: mecanismo de bloqueo cooperativo por clave arbitraria (aquí, cliente_id) para serializar el procesamiento de mensajes de un mismo cliente.
 - **BSP (Business Solution Provider)**: proveedor certificado por Meta que revende acceso al API con features adicionales (Twilio, 360dialog, etc.). En este proyecto NO se usa BSP; se integra directo con Cloud API.
 - **Opt-in**: consentimiento explícito del cliente para recibir mensajes proactivos. Obligatorio por LFPDPPP y política Meta. El opt-in para marketing es adicional y separado del opt-in básico.
-- **Pricing category**: clasificación (`service`, `utility`, `marketing`, `authentication`) que Meta asigna a cada mensaje saliente y reporta vía webhook; base para el dashboard de costos propio del proyecto.
+- **Pricing category**: clasificación (`service`, `utility`, `marketing`, `authentication`, `Meta Business Agent`) que Meta asigna a cada mensaje saliente y reporta vía webhook; base para el dashboard de costos propio del proyecto.
+- **MSPC (mensajes salientes por pedido completado)**: métrica propia del proyecto. Cuántos mensajes cobrables gasta el bot para cerrar un pedido. Es la unidad económica del sistema desde el cambio de tarifas del 1-oct-2026.
+- **Meta Business Agent**: quinta categoría de mensaje (agosto 2026). Meta procesa el mensaje del cliente con su propio LLM y genera la respuesta; cobra por tokens de procesamiento más el envío. Descartada en este proyecto.
+- **Ventana de sesión de 24h**: periodo que se abre cuando el cliente escribe, durante el cual el negocio puede responder con texto libre en vez de plantilla. Desde el 1-oct-2026 sigue determinando *qué formato* se puede enviar, pero ya **no** determina si el mensaje es gratis.
 - **Ventana rodante (rolling window)**: el límite de conversaciones iniciadas por el negocio (250, 1000, etc.) no se reinicia a medianoche — se calcula sobre cualquier periodo de 24h hacia atrás desde el momento actual.
