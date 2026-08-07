@@ -1,6 +1,6 @@
 ## Depende de
 
-- #79 — línea base medida
+- #80 — línea base medida
 
 ## Objetivo
 

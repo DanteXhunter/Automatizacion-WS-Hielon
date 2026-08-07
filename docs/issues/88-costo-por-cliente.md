@@ -1,6 +1,6 @@
 ## Depende de
 
-- #86 — métrica MSPC funcionando
+- #87 — métrica MSPC funcionando
 
 ## Objetivo
 
@@ -52,4 +52,4 @@ matutino segmentado, no masivo"). Sin este dato, la segmentación sería a ojo.
 - [ ] Distingue mensajes del flujo de pedido de recordatorios
 - [ ] Identifica clientes con recordatorios y cero pedidos
 - [ ] Compara contra el histórico del propio cliente, no solo el mes
-- [ ] Mismo esquema de API key que #85
+- [ ] Mismo esquema de API key que #86

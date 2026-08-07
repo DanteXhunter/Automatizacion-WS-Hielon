@@ -1,7 +1,7 @@
 ## Depende de
 
-- #78 — mensajes con `pedido_id`
-- #85 — patrón de endpoint admin ya establecido
+- #79 — mensajes con `pedido_id`
+- #86 — patrón de endpoint admin ya establecido
 
 ## Objetivo
 
@@ -52,4 +52,4 @@ en `mensajes_sin_pedido`: se gastaron igual.
 - [ ] Promedio, mediana, p90 y distribución
 - [ ] Mensajes sin pedido reportados aparte, con su costo
 - [ ] Solo pedidos completados cuentan para el MSPC
-- [ ] Mismo esquema de API key que #85
+- [ ] Mismo esquema de API key que #86

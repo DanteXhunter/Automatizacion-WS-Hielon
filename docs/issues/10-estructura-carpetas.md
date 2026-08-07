@@ -19,9 +19,9 @@ separación.
 ## Qué se crea en este issue
 
 ```
-.env.example
-.gitignore
-requirements.txt
+.env.example              # vacío, se llena en el issue #11
+.gitignore                 # vacío, se llena en el issue #11
+requirements.txt           # vacío, se llena en el issue #11
 src/
 ├── __init__.py
 ├── main.py              # se llena en el issue #12

@@ -1,6 +1,6 @@
 ## Depende de
 
-- #85 — cálculo de gasto
+- #86 — cálculo de gasto
 - #48 — mecanismo de notificación por WhatsApp a Gabriel
 
 ## Objetivo

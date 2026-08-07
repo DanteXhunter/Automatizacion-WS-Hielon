@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Crea los 89 issues del proyecto en GitHub, uno por comando, leyendo el body
+# Crea los issues del proyecto en GitHub, uno por comando, leyendo el body
 # desde su archivo .md correspondiente en docs/issues/.
 #
 # Uso:
@@ -10,12 +10,21 @@
 # Revisa cada bloque antes de correr. gh pide confirmación implícita al
 # imprimir la URL creada; si algo sale mal, el issue creado se borra o
 # edita a mano desde GitHub.
+#
+# Nota (6-ago-2026): el número de issue creado por gh NO siempre coincide
+# con el número usado aquí abajo — GitHub numera issues y PRs en la misma
+# secuencia. El #78 quedó ocupado por un PR merged, así que los issues que
+# originalmente iban del 78 al 89 se corrieron al 79-90 (ya creados y
+# renombrados en docs/issues/ para que el número del archivo coincida con
+# el número real en GitHub). Si vuelves a correr este script en un repo
+# limpio, verifica el número real que devuelve `gh issue create` en vez de
+# asumir que coincide con el de esta lista.
 
 set -euo pipefail
 cd "$(dirname "$0")"
 
 DESDE="${1:-1}"
-HASTA="${2:-89}"
+HASTA="${2:-90}"
 
 crear() {
   local numero="$1" titulo="$2" labels="$3" milestone="$4" archivo="$5"
@@ -133,19 +142,19 @@ crear 76 "Integracion con el ERP interno"                             "backlog,b
 crear 77 "Clasificacion de intencion con LLM"                         "backlog,backend"             ""    "77-llm-clasificacion-intencion.md"
 
 # --- Fase 3.5 (va despues de la Fase 3, antes de produccion) ---
-crear 78 "Instrumentar costo y categoria de cada mensaje saliente"    "backend,costos,db"           "$M35" "78-instrumentar-costos-mensajes.md"
-crear 79 "Medir el MSPC base del flujo actual"                       "backend,costos"              "$M35" "79-medir-mspc-base.md"
-crear 80 "Fusionar estados que caben en un solo mensaje"             "fsm,costos"                  "$M35" "80-fusionar-estados-mensajes.md"
-crear 81 "Evaluar Interactive List contra Reply Buttons"             "fsm,costos"                  "$M35" "81-interactive-list-vs-buttons.md"
-crear 82 "Atajo repetir pedido anterior para recurrentes"            "fsm,costos"                  "$M35" "82-atajo-repetir-pedido-anterior.md"
-crear 83 "Politica de no respuesta a entradas irrelevantes"          "fsm,costos"                  "$M35" "83-politica-no-respuesta.md"
-crear 84 "Re-medir MSPC y documentar el ahorro"                      "backend,costos,docs"         "$M35" "84-remedir-mspc-documentar-ahorro.md"
+crear 79 "Instrumentar costo y categoria de cada mensaje saliente"    "backend,costos,db"           "$M35" "79-instrumentar-costos-mensajes.md"
+crear 80 "Medir el MSPC base del flujo actual"                       "backend,costos"              "$M35" "80-medir-mspc-base.md"
+crear 81 "Fusionar estados que caben en un solo mensaje"             "fsm,costos"                  "$M35" "81-fusionar-estados-mensajes.md"
+crear 82 "Evaluar Interactive List contra Reply Buttons"             "fsm,costos"                  "$M35" "82-interactive-list-vs-buttons.md"
+crear 83 "Atajo repetir pedido anterior para recurrentes"            "fsm,costos"                  "$M35" "83-atajo-repetir-pedido-anterior.md"
+crear 84 "Politica de no respuesta a entradas irrelevantes"          "fsm,costos"                  "$M35" "84-politica-no-respuesta.md"
+crear 85 "Re-medir MSPC y documentar el ahorro"                      "backend,costos,docs"         "$M35" "85-remedir-mspc-documentar-ahorro.md"
 
 # --- Fase 6.1 ---
-crear 85 "Endpoint de gasto por categoria y periodo"                 "backend,costos,admin"        "$M61" "85-endpoint-gasto-por-categoria.md"
-crear 86 "Endpoint de metrica MSPC"                                  "backend,costos,admin"        "$M61" "86-endpoint-metrica-mspc.md"
-crear 87 "Costo por cliente y deteccion de gasto sin venta"          "backend,costos,admin"        "$M61" "87-costo-por-cliente.md"
-crear 88 "Vista HTML del dashboard de costos"                        "backend,costos,admin"        "$M61" "88-vista-dashboard-costos.md"
-crear 89 "Alerta de gasto mensual al WhatsApp de Gabriel"            "backend,costos,alertas"      "$M61" "89-alerta-gasto-mensual.md"
+crear 86 "Endpoint de gasto por categoria y periodo"                 "backend,costos,admin"        "$M61" "86-endpoint-gasto-por-categoria.md"
+crear 87 "Endpoint de metrica MSPC"                                  "backend,costos,admin"        "$M61" "87-endpoint-metrica-mspc.md"
+crear 88 "Costo por cliente y deteccion de gasto sin venta"          "backend,costos,admin"        "$M61" "88-costo-por-cliente.md"
+crear 89 "Vista HTML del dashboard de costos"                        "backend,costos,admin"        "$M61" "89-vista-dashboard-costos.md"
+crear 90 "Alerta de gasto mensual al WhatsApp de Gabriel"            "backend,costos,alertas"      "$M61" "90-alerta-gasto-mensual.md"
 
 echo "Listo. Verifica con: gh issue list --limit 100"

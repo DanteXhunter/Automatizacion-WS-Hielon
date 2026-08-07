@@ -1,6 +1,6 @@
 ## Depende de
 
-- #80, #81, #82, #83 — todas las optimizaciones aplicadas
+- #81, #82, #83, #84 — todas las optimizaciones aplicadas
 
 ## Objetivo
 
@@ -9,7 +9,7 @@ revertirse.
 
 ## Qué se compara
 
-Contra la línea base de `docs/mspc-baseline.md` (issue #79):
+Contra la línea base de `docs/mspc-baseline.md` (issue #80):
 
 | Métrica | Base | Ahora | Δ |
 |---|---|---|---|

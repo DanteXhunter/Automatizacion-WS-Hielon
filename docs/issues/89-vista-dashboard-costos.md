@@ -1,6 +1,6 @@
 ## Depende de
 
-- #85, #86, #87 — los tres endpoints
+- #86, #87, #88 — los tres endpoints
 
 ## Objetivo
 

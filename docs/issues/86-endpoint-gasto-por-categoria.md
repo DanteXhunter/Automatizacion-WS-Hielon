@@ -1,6 +1,6 @@
 ## Depende de
 
-- #78 — mensajes instrumentados con categoría y costo
+- #79 — mensajes instrumentados con categoría y costo
 
 ## Objetivo
 

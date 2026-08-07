@@ -1,6 +1,6 @@
 ## Depende de
 
-- #78 — instrumentación de costos
+- #79 — instrumentación de costos
 - #44 — flujo de pedido completo, incluido el botón Volver
 
 ## Objetivo

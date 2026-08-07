@@ -719,24 +719,24 @@ Cada fase se convierte en un **milestone**; cada bullet, en un **issue**.
 
 ### Fase 3.5 — Optimización de mensajes salientes (después de Fase 3, antes de producción)
 
-**Nota de orden (6-ago-2026)**: la instrumentación de costos estaba originalmente en la Fase 6.1, pero esta fase *arranca midiendo* el MSPC y medir exige haber instrumentado antes. El issue #78 se adelantó aquí; los endpoints y la vista se quedan en la 6.1.
+**Nota de orden (6-ago-2026)**: la instrumentación de costos estaba originalmente en la Fase 6.1, pero esta fase *arranca midiendo* el MSPC y medir exige haber instrumentado antes. El issue #79 se adelantó aquí; los endpoints y la vista se quedan en la 6.1.
 
-- [ ] #78 — Instrumentar cada mensaje saliente con `pricing_category`, `costo_estimado` y `pedido_id`
-- [ ] #79 — Medir el MSPC base del flujo implementado (línea base en `docs/mspc-baseline.md`)
-- [ ] #80 — Fusionar estados que pueden viajar en un solo mensaje (ver "Presupuesto de mensajes")
-- [ ] #81 — Evaluar Interactive List vs. Reply Buttons encadenados
-- [ ] #82 — Atajo "repetir pedido anterior" para clientes recurrentes (**mayor ahorro esperado: -5 MSPC**)
-- [ ] #83 — Política de no-respuesta a entradas irrelevantes
-- [ ] #84 — Re-medir MSPC y documentar el ahorro; revertir lo que suba el abandono
+- [ ] #79 — Instrumentar cada mensaje saliente con `pricing_category`, `costo_estimado` y `pedido_id`
+- [ ] #80 — Medir el MSPC base del flujo implementado (línea base en `docs/mspc-baseline.md`)
+- [ ] #81 — Fusionar estados que pueden viajar en un solo mensaje (ver "Presupuesto de mensajes")
+- [ ] #82 — Evaluar Interactive List vs. Reply Buttons encadenados
+- [ ] #83 — Atajo "repetir pedido anterior" para clientes recurrentes (**mayor ahorro esperado: -5 MSPC**)
+- [ ] #84 — Política de no-respuesta a entradas irrelevantes
+- [ ] #85 — Re-medir MSPC y documentar el ahorro; revertir lo que suba el abandono
 
 **Meta de la fase**: MSPC ≤ 5 para cliente nuevo, ≤ 3 para recurrente, sin que suba la tasa de abandono.
 
 ### Fase 6.1 — Dashboard de costos propio (semana 9-10)
-- [ ] #85 — Endpoint que agregue gasto por categoría y periodo (día/semana/mes)
-- [ ] #86 — Endpoint de **métrica MSPC**: promedio, mediana, p90 y distribución; es el KPI de eficiencia del bot
-- [ ] #87 — Costo por cliente; identificar quién consume mensajes sin comprar
-- [ ] #88 — Vista HTML mínima: total por categoría, costo acumulado, proyección contra el umbral
-- [ ] #89 — Alerta al WhatsApp de Gabriel si el gasto mensual estimado supera el umbral configurable
+- [ ] #86 — Endpoint que agregue gasto por categoría y periodo (día/semana/mes)
+- [ ] #87 — Endpoint de **métrica MSPC**: promedio, mediana, p90 y distribución; es el KPI de eficiencia del bot
+- [ ] #88 — Costo por cliente; identificar quién consume mensajes sin comprar
+- [ ] #89 — Vista HTML mínima: total por categoría, costo acumulado, proyección contra el umbral
+- [ ] #90 — Alerta al WhatsApp de Gabriel si el gasto mensual estimado supera el umbral configurable
 
 ### Backlog nice-to-have (sin sprint, futuro)
 - Pedido mínimo (20 bolsas)
@@ -767,6 +767,7 @@ El usuario prefiere **guía paso a paso, no ejecución masiva**. Reglas:
 9. **El objetivo declarado del usuario es aprender a construir esto, no tener esto construido.** No entregar archivos terminados para que los copie. El patrón correcto por issue es: (a) explicar el problema que el archivo resuelve y por qué existe como archivo separado, (b) mostrar la forma de la solución, (c) dejar que él escriba el cuerpo, (d) revisar y corregir con fundamento. Si él pide directamente el código completo, dárselo, pero acompañado de la explicación de por qué está así.
 10. **Preferir enseñar el patrón general sobre la solución particular.** Cuando aparezca algo replicable (webhook, FSM, lock, idempotencia), nombrarlo, decir dónde más se usa en la industria y qué falla si se hace mal. El usuario quiere poder repetir esto en otro proyecto.
 11. **No inventar tarifas ni políticas de Meta.** Cambian seguido. Verificar contra la documentación oficial de pricing antes de afirmar un número, y actualizar la sección 2 de este documento con la fecha de verificación.
+12. **Convención "COCHABAMBA" (7-ago-2026).** Cuando el usuario escriba la palabra `COCHABAMBA`, Claude entrega en el chat, solo como texto: (a) título de commit, (b) cuerpo del PR con el formato "¿Qué hace este PR?" / "Issues que cierra" / "Resultado de prueba" / "Notas", (c) el comando para crear la rama del siguiente issue. **No ejecutar** `git commit`, `git push` ni `gh pr create` al recibir este trigger — el usuario revisa y corre todo manualmente. Es su repositorio y su flujo de revisión; publicar por su cuenta le quita control sobre qué llega a `origin`.
 
 ---
 
@@ -788,7 +789,8 @@ El usuario prefiere **guía paso a paso, no ejecución masiva**. Reglas:
 
 ## Historial de cambios de este documento
 
-- **2026-08-06 (2)** — Barrido de consistencia sobre los 77 issues: handoff Telegram→WhatsApp (7 issues), despliegue AWS/EC2→Railway (8 issues, Docker degradado a Fase 5.1 opcional), pricing por mensaje de oct-2026 (6 issues), issue #10 recortado a estructura incremental. Resuelta la contradicción interna del propio CLAUDE.md (stack decía Railway, arquitectura y roadmap decían AWS). Creados 12 issues nuevos (#78-#89) para las Fases 3.5 y 6.1, que estaban en el roadmap sin archivos. La instrumentación de costos (#78) se movió de la Fase 6.1 a la 3.5 por dependencia circular: no se puede medir el MSPC sin haberlo instrumentado.
+- **2026-08-06 (3)** — Sincronizados los 89 issues locales con GitHub: actualizado el body de 66 issues existentes que seguían con el contenido pre-barrido (Telegram, AWS/EC2, Caddy), y creados los 12 issues de las Fases 3.5 y 6.1 (previamente solo existían como archivo local, sin issue real en GitHub). Al crearlos, GitHub tenía el número #78 ocupado por un pull request ya mergeado, así que la numeración real quedó corrida +1: **los issues de las Fases 3.5 y 6.1 son #79-#90 en GitHub, no #78-#89.** Se renombraron los archivos en `docs/issues/` y se actualizaron sus referencias cruzadas internas y `crear-issues.sh` para reflejar la numeración real. Los 89 issues (todo salvo el PR #78) quedaron asignados al tablero del proyecto.
+- **2026-08-06 (2)** — Barrido de consistencia sobre los 77 issues: handoff Telegram→WhatsApp (7 issues), despliegue AWS/EC2→Railway (8 issues, Docker degradado a Fase 5.1 opcional), pricing por mensaje de oct-2026 (6 issues), issue #10 recortado a estructura incremental. Resuelta la contradicción interna del propio CLAUDE.md (stack decía Railway, arquitectura y roadmap decían AWS). Creados 12 issues nuevos (#78-#89 en el plan original; ver entrada de arriba para la numeración real) para las Fases 3.5 y 6.1, que estaban en el roadmap sin archivos. La instrumentación de costos se movió de la Fase 6.1 a la 3.5 por dependencia circular: no se puede medir el MSPC sin haberlo instrumentado.
 - **2026-08-06** — Añadidas las secciones "Estado actual y riesgos" (baneo de Meta Business, fecha objetivo oct-2026) y "Cómo se construye el repositorio" (estructura incremental, issue 10 recortado a 5 archivos). Calibrado el nivel técnico real del desarrollador y registrados los conceptos ya comprendidos para no re-explicarlos. Handoff a humano cambiado de **Telegram a WhatsApp** (Gabriel no usa Telegram): requiere plantilla `handoff_asesor` de categoría utility. Añadido el formato de 4 preguntas por archivo nuevo.
 - **2026-08-05** — Reescrita la sección 2 al modelo de cobro por mensaje vigente desde el 1-oct-2026 (`service` deja de ser gratis; MX$0.1565/mensaje). Añadidas la sección 2.1 "Presupuesto de mensajes" con la métrica MSPC, la sección de alcance, la Fase 3.5 de optimización, campos `costo_estimado` y `pedido_id` en `mensajes`, y tarifas en variables de entorno. Documentada y descartada la categoría Meta Business Agent.
 

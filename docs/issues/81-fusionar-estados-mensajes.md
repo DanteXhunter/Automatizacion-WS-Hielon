@@ -1,6 +1,6 @@
 ## Depende de
 
-- #79 — línea base medida
+- #80 — línea base medida
 
 ## Objetivo
 
@@ -23,7 +23,7 @@ desperdicia mandando una pregunta por mensaje.
 Pasos donde la respuesta del cliente **cambia lo que hay que preguntar
 después**. `SELECCIONANDO_PRODUCTO` y `CAPTURANDO_CANTIDAD` no se pueden juntar
 en dos mensajes independientes porque la cantidad se pregunta *sobre* el
-producto elegido. Para eso está el issue #81 (Interactive List).
+producto elegido. Para eso está el issue #82 (Interactive List).
 
 ## Límites de la plataforma
 
@@ -31,7 +31,7 @@ producto elegido. Para eso está el issue #81 (Interactive List).
 - Reply Buttons: **máximo 3**, con 20 caracteres de título cada uno
 
 Si al fusionar se necesitan más de 3 opciones, el camino es List Message
-(issue #81), no partir el mensaje otra vez.
+(issue #82), no partir el mensaje otra vez.
 
 ## Riesgo a vigilar
 
@@ -51,4 +51,4 @@ depurar y rompería el botón "Volver" del issue #44.
 - [ ] Resumen y confirmación viajan en un mensaje
 - [ ] Ningún `body` supera 1024 caracteres
 - [ ] Los estados de la FSM siguen siendo distinguibles
-- [ ] MSPC re-medido y comparado contra #79
+- [ ] MSPC re-medido y comparado contra #80
