@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+gunicorn
+sqlmodel
+alembic
+asyncpg
+httpx
+pydantic-settings
+python-dotenv
+pytest
+pytest-asyncio
+black
+ruff
