@@ -37,7 +37,7 @@ Es mucho mejor que reventar a las 3 AM en el cron de recordatorios.
 | `tarifa_service_mxn` | Decimal | no, default 0.1565 |
 | `tarifa_utility_mxn` | Decimal | no, default 0.1565 |
 | `tarifa_authentication_mxn` | Decimal | no, default 0.1565 |
-| `tarifa_marketing_mxn` | Decimal | no, default 0.8000 |
+| `tarifa_marketing_mxn` | Decimal | no, default 0.5614 |
 | `alerta_gasto_mensual_mxn` | Decimal | no, default 2000 |
 
 ## Por qué las tarifas son configuración y no constantes
