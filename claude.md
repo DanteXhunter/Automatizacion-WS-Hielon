@@ -145,7 +145,7 @@ WhatsApp le pertenece a Meta. La única vía legal para automatizar mensajería 
   | `service` | Texto libre dentro de la ventana de 24h (todo el flujo del bot) | **MX$0.1565 / mensaje** (~USD $0.0085) |
   | `utility` | Transaccional: recordatorio, confirmación, status | **MX$0.1565 / mensaje**, dentro o fuera de ventana |
   | `authentication` | OTPs. No aplica a este proyecto | **MX$0.1565 / mensaje** |
-  | `marketing` | Promocional, requiere opt-in específico | **~USD $0.0436 / mensaje** (~5x más caro) |
+  | `marketing` | Promocional, requiere opt-in específico | **~MX $0.5614 / mensaje** (~5x más caro) |
   | `Meta Business Agent` | IA propia de Meta que procesa y responde el mensaje por ti. Cobro doble: tokens (~USD $2.00 / millón) + el envío | **No se usa en este proyecto** |
 
 - **Lo que cambia respecto al modelo anterior**: antes cada conversación tenía un costo de apertura y el resto de los mensajes de la ventana eran gratis. Ahora **se cobra por mensaje saliente, uno por uno, sin importar la ventana**. `service` deja de ser gratis y pasa a costar lo mismo que `utility`. Meta ya no da descuento por volumen en `service`: la tarifa es plana.
@@ -629,7 +629,7 @@ TIMEZONE=America/Mexico_City
 TARIFA_SERVICE_MXN=0.1565
 TARIFA_UTILITY_MXN=0.1565
 TARIFA_AUTHENTICATION_MXN=0.1565
-TARIFA_MARKETING_MXN=0.8000
+TARIFA_MARKETING_MXN=0.5614
 ALERTA_GASTO_MENSUAL_MXN=2000
 ```
 
