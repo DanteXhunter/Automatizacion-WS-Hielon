@@ -86,6 +86,8 @@ Los datos capturados por el bot alimentarán en el futuro el ERP interno (fuera 
 
 ## Estado actual y riesgos (6-ago-2026)
 
+**Actualización técnica (24-sep-2026):** el webhook ya registra mensajes entrantes de forma idempotente y conecta la FSM para `IDLE`, `MENU_PRINCIPAL` y `EN_ASESOR_HUMANO`. El saludo y menú salen en un solo mensaje interactivo; el primer contacto se detecta por ausencia de conversación previa, no por `cliente.nombre`, porque Meta puede entregar un nombre de perfil desde el primer webhook. El dispatcher usa un advisory lock transaccional por cliente antes de leer su estado. Existe la lógica de horario en `src/utils/datetime.py`, pero aún no se aplica como filtro al webhook. `paso_hora_corte` devuelve verdadero después de las 14:00, no exactamente a las 14:00. La opción de producto muestra botones provisionales hasta que el catálogo activo se conecte a la FSM. El handoff todavía no envía la notificación al asesor. No se ha validado el envío en un teléfono real.
+
 **Fecha objetivo de entrega**: finales de agosto a mediados de octubre de 2026 (~10 semanas). Cuadra con el roadmap completo, incluyendo n8n y dashboard de costos.
 
 **Estado por fase:**
@@ -595,7 +597,7 @@ automatizacion-ws-hielon/
 - Agrupar normalmente cuatro issues por commit; usar menos si son grandes y más si son pequeños.
 - El asistente prepara código, pruebas y comandos, pero el desarrollador ejecuta los commits y pushes. No agregar atribución del asistente en el historial del repositorio.
 - Título de commit: acción concreta, en imperativo y de máximo 72 caracteres.
-- Cuerpo de cada commit: (1) enumerar el trabajo realizado por issue, (2) agregar una línea `Closes #N` por cada issue realmente resuelto, y (3) indicar los siguientes issues que se trabajarán. En el próximo commit se regularizará el cierre de issues de commits anteriores que ya estén integrados.
+- Cuerpo de cada commit: (1) enumerar el trabajo realizado por issue, (2) agregar una línea `Closes #N` por cada issue realmente resuelto, y (3) indicar los siguientes issues que se trabajarán.
 - Los cierres automáticos de GitHub se aplican al integrarse en la rama predeterminada. Si el PR apunta a `dev`, comprobar el estado del issue tras la integración o cerrarlo desde GitHub cuando corresponda.
 
 ### Testing

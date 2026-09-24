@@ -1,3 +1,4 @@
+import json
 import logging
 
 import httpx
@@ -130,3 +131,43 @@ async def test_error_de_red_se_reintenta_tres_veces():
 
     assert "conectar" in str(error.value)
     assert intentos == 3
+
+
+@pytest.mark.asyncio
+async def test_envia_reply_buttons_con_ids_estables():
+    async def responder(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload["type"] == "interactive"
+        assert payload["to"] == "5214771234567"
+        assert payload["interactive"]["action"]["buttons"][0]["reply"] == {
+            "id": "hacer_pedido",
+            "title": "Hacer pedido",
+        }
+        return httpx.Response(200, json={"messages": [{"id": "wamid.botones"}]})
+
+    cliente = WhatsAppClient(
+        TOKEN_PRUEBA,
+        PHONE_NUMBER_ID_PRUEBA,
+        transport=httpx.MockTransport(responder),
+        sleeper=no_esperar,
+    )
+    try:
+        message_id = await cliente.enviar_interactivo(
+            "5214771234567",
+            {
+                "type": "button",
+                "body": {"text": "¿En qué te ayudo?"},
+                "action": {
+                    "buttons": [
+                        {
+                            "type": "reply",
+                            "reply": {"id": "hacer_pedido", "title": "Hacer pedido"},
+                        }
+                    ]
+                },
+            },
+        )
+    finally:
+        await cliente.aclose()
+
+    assert message_id == "wamid.botones"

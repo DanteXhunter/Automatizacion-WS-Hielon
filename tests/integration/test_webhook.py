@@ -19,25 +19,24 @@ def test_post_webhook_con_firma_invalida_devuelve_403():
     assert respuesta.status_code == 403
 
 
-def test_mensaje_entrante_programa_respuesta_echo(monkeypatch):
-    class ClienteWhatsAppFalso:
-        def __init__(self) -> None:
-            self.envios: list[tuple[str, str]] = []
+def test_mensaje_entrante_programa_procesamiento_de_fsm(monkeypatch):
+    from src.models.cliente import Cliente
 
-        async def enviar_texto(self, destinatario: str, texto: str) -> str:
-            self.envios.append((destinatario, texto))
-            return "wamid.prueba"
-
-    cliente_falso = ClienteWhatsAppFalso()
+    cliente = Cliente(telefono="+5214771234567")
+    procesados: list[tuple[str, str]] = []
 
     async def registrar_mensaje_nuevo(_value, mensaje):
-        return mensaje["from"]
+        return cliente
+
+    async def procesar(_cliente_whatsapp, cliente_recibido, mensaje):
+        procesados.append((cliente_recibido.telefono, mensaje["id"]))
 
     monkeypatch.setattr(webhook, "_registrar_mensaje_entrante", registrar_mensaje_nuevo)
+    monkeypatch.setattr(webhook, "_procesar_mensaje", procesar)
     monkeypatch.setattr(
         app.state,
         "whatsapp_client",
-        cliente_falso,
+        object(),
         raising=False,
     )
 
@@ -64,6 +63,4 @@ def test_mensaje_entrante_programa_respuesta_echo(monkeypatch):
 
     assert respuesta.status_code == 200
     assert respuesta.json() == {"status": "received"}
-    assert cliente_falso.envios == [
-        ("5214771234567", "Recibí tu mensaje"),
-    ]
+    assert procesados == [("+5214771234567", "wamid.entrada")]

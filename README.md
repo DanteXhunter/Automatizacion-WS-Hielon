@@ -2,7 +2,7 @@
 
 Backend en Python para atender conversaciones de WhatsApp de Hielon de León, registrar clientes y pedidos, y derivar los casos que requieren a una persona. El canal previsto es **WhatsApp Cloud API de Meta**; el flujo de pedido se construye con una máquina de estados determinista.
 
-> **Estado del proyecto:** en desarrollo. El webhook, la validación de firma, el cliente HTTP de Meta, el esquema de datos, la deduplicación de mensajes y la base de la máquina de estados ya tienen código. Los handlers que capturan y confirman pedidos todavía no están conectados. El mensaje saliente actual es un echo provisional; no representa el flujo final de atención. Los precios del catálogo son provisionales (`0.00 MXN`) y no deben usarse para vender.
+> **Estado del proyecto:** en desarrollo. El webhook, la validación de firma, la deduplicación, el saludo y el menú interactivo ya están conectados. La captura y confirmación de pedidos, la notificación efectiva a un asesor y la aplicación del horario al webhook siguen pendientes. Los precios del catálogo son provisionales (`0.00 MXN`) y no deben usarse para vender.
 
 ## Para qué existe
 
@@ -17,10 +17,10 @@ El repositorio contiene el **backend del bot**. Un ERP, un panel de chat para as
 | `GET /health` | Devuelve el estado básico de la aplicación. |
 | `GET /webhook/whatsapp` | Responde al desafío de verificación de Meta cuando el token coincide. |
 | `POST /webhook/whatsapp` | Comprueba la firma HMAC-SHA256 antes de interpretar el cuerpo, registra clientes y mensajes entrantes y descarta reintentos por `whatsapp_message_id`. |
-| Mensajes salientes | Cliente `httpx` para Cloud API con timeout y reintentos ante fallos temporales. El webhook programa un echo solo para mensajes nuevos. La prueba con un teléfono real depende de la configuración de Meta. |
+| Mensajes salientes | Cliente `httpx` para texto y botones interactivos, con timeout y reintentos ante fallos temporales. El primer contacto responde con saludo y menú en un solo mensaje. La prueba con un teléfono real depende de la configuración de Meta. |
 | Datos | Siete tablas SQLModel, una migración inicial de Alembic y un script idempotente para sembrar tres productos. |
-| Conversación | Enum, mapa de transiciones, normalizador de entradas y dispatcher con persistencia antes del envío. Los handlers aún no se registran ni se invocan desde el webhook. |
-| Operación futura | Están previstos la confirmación de pedidos, el control de horario, el handoff humano, los recordatorios con n8n, el despliegue en Railway y las métricas de costos. |
+| Conversación | El dispatcher procesa el saludo y el menú, consulta pedidos activos y protege cada conversación con un lock transaccional por cliente. Las funciones de horario ya existen, pero todavía no restringen la atención. |
+| Operación futura | Están previstos la captura y confirmación de pedidos, el handoff humano con notificación, los recordatorios con n8n, el despliegue en Railway y las métricas de costos. |
 
 La máquina de estados no utiliza un modelo de lenguaje en la primera versión. Esto permite saber qué datos espera el bot en cada paso y rechazar transiciones no previstas.
 
@@ -35,7 +35,10 @@ Meta Cloud API ── POST firmado ──► FastAPI /webhook/whatsapp
                                       ├─ valida HMAC sobre los bytes originales
                                       ├─ identifica al cliente por teléfono
                                       ├─ inserta el mensaje si su ID es nuevo
-                                      └─ programa el echo provisional
+                                      └─ programa el procesamiento de la conversación
+                                                │
+                                                ▼
+                                      dispatcher + lock por cliente
                                                 │
                                                 ▼
                                       cliente httpx → Meta Cloud API
@@ -45,7 +48,7 @@ PostgreSQL ◄── SQLModel / asyncpg ── servicios y dispatcher de convers
                     └── Alembic / psycopg2 para migraciones
 ```
 
-La deduplicación se apoya en un índice único de PostgreSQL, por lo que sigue funcionando con varios procesos. El dispatcher ya define que primero se guarda el nuevo estado y luego se envían mensajes; conectarlo al webhook y proteger los mensajes simultáneos del mismo cliente con advisory locks son pasos próximos.
+La deduplicación se apoya en un índice único de PostgreSQL, por lo que sigue funcionando con varios procesos. El dispatcher toma un advisory lock por cliente antes de leer su conversación, guarda el nuevo estado y solo después envía la respuesta. Los mensajes de clientes distintos no comparten lock.
 
 ### Modelo de datos
 
@@ -95,8 +98,9 @@ El esquema describe el destino de la aplicación; que exista una tabla no signif
 │   ├── database.py             # engine y fábrica de sesiones async
 │   ├── api/                    # health y webhook
 │   ├── models/                 # siete entidades SQLModel
-│   ├── services/               # alta de clientes y registro de mensajes
-│   ├── fsm/                    # estados, normalización y dispatcher
+│   ├── services/               # clientes, mensajes, consulta de pedidos y locks
+│   ├── fsm/                    # estados, dispatcher y handlers del menú
+│   ├── utils/                  # fecha y horario local
 │   └── whatsapp/               # firma HMAC y cliente de Meta
 └── tests/
     ├── unit/
@@ -145,7 +149,7 @@ Abre `http://127.0.0.1:8000/health` para comprobar el proceso o `http://127.0.0.
 | `WHATSAPP_VERIFY_TOKEN` | Valor acordado para el `GET` de verificación. |
 | `WHATSAPP_APP_SECRET` | Clave usada para validar `X-Hub-Signature-256`. |
 | `WHATSAPP_TELEFONO_ADMIN` | Número previsto para el handoff humano. |
-| `HORA_INICIO`, `HORA_FIN`, `HORA_CORTE_MISMO_DIA`, `TIMEZONE` | Configuración de horario para fases siguientes. |
+| `HORA_INICIO`, `HORA_FIN`, `HORA_CORTE_MISMO_DIA`, `TIMEZONE` | Horario local y corte; su aplicación al webhook aún está pendiente. |
 | `TARIFA_*_MXN`, `ALERTA_GASTO_MENSUAL_MXN` | Parámetros previstos para medir costos; revisar antes de usarlos en producción. |
 
 Consulta `.env.example` para todos los nombres y valores de muestra. Los valores de ejemplo no autentican contra Meta.
@@ -156,18 +160,18 @@ La suite habitual no requiere una cuenta de Meta:
 
 ```bash
 pytest -q
-black --check src/fsm src/services
-ruff check src/fsm src/services
+black --check src/fsm src/services src/utils
+ruff check src/fsm src/services src/utils
 ```
 
 Hay archivos de la fase inicial que aún no siguen el formato actual de Black/Ruff; el chequeo global de estilo se habilitará después de normalizarlos.
 
-La prueba de duplicados necesita una base PostgreSQL **exclusiva de tests** y omite su ejecución si no se define `TEST_DATABASE_URL`. Para correrla:
+Las pruebas de deduplicación y locks necesitan una base PostgreSQL **exclusiva de tests** y omiten su ejecución si no se define `TEST_DATABASE_URL`. Para correrlas:
 
 ```bash
 createdb hielon_test
 DATABASE_URL=postgresql+asyncpg://USUARIO@localhost:5432/hielon_test alembic upgrade head
-TEST_DATABASE_URL=postgresql+asyncpg://USUARIO@localhost:5432/hielon_test pytest -q tests/integration/test_webhook_idempotencia.py
+TEST_DATABASE_URL=postgresql+asyncpg://USUARIO@localhost:5432/hielon_test pytest -q tests/integration/test_webhook_idempotencia.py tests/integration/test_locks.py
 ```
 
 Sustituye `USUARIO` por el usuario local de PostgreSQL. La prueba crea registros de prueba en esa base; no la apuntes a desarrollo ni producción. El cliente de Meta se sustituye por uno falso durante el test: no envía WhatsApps reales.
@@ -175,9 +179,9 @@ Sustituye `USUARIO` por el usuario local de PostgreSQL. La prueba crea registros
 ## Seguridad y límites de la versión actual
 
 - El webhook verifica la firma sobre los bytes originales antes de procesar el JSON. Las firmas ausentes o inválidas reciben `403`.
-- El teléfono se normaliza antes del alta; el ID único de mensaje evita que un reintento de Meta cree otra fila o programe otro echo.
+- El teléfono se normaliza antes del alta; el ID único de mensaje evita que un reintento de Meta cree otra fila o programe otra respuesta. Los locks impiden que dos mensajes del mismo cliente modifiquen su conversación a la vez.
 - `.env` está ignorado por Git. No publiques secretos ni datos personales en ejemplos o logs.
-- El echo actual es una respuesta de desarrollo. **No hay captura ni confirmación de pedidos operativa**, ni control de horario, opt-in completo, advisory locks o handoff humano funcional.
+- **No hay captura ni confirmación de pedidos operativa**. El botón para pedir muestra presentaciones provisionales, todavía sin seleccionar productos desde el catálogo. El estado de asesor silencia al bot, pero aún no notifica a una persona. Tampoco se aplica el horario al webhook ni existe opt-in completo.
 - La cuenta y el webhook de Meta deben configurarse para demostrar un envío real; las pruebas automatizadas usan dobles de prueba.
 
 ## Mantenimiento
@@ -188,6 +192,6 @@ Este repositorio aún no incluye un archivo `LICENSE`; consulta al propietario a
 
 ## Desarrollo previsto
 
-Los siguientes componentes funcionales son el saludo y menú inicial, la serialización de mensajes por cliente y el control de horario laboral. Después se conectará la captura de pedidos con la persistencia y se comprobará el recorrido completo con pruebas de integración. La configuración de Meta para un envío real se realiza por separado.
+Los siguientes componentes funcionales son la selección de productos desde el catálogo, la captura de cantidades y direcciones, la confirmación de pedidos, la notificación de handoff humano y la aplicación del horario laboral al webhook. La configuración de Meta para un envío real se realiza por separado.
 
 Las decisiones de negocio y arquitectura están documentadas en [`claude.md`](claude.md).

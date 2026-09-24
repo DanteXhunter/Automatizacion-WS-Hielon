@@ -29,7 +29,9 @@ class SesionFalsa:
     eventos: list[str] = field(default_factory=list)
     agregados: list[Conversacion] = field(default_factory=list)
 
-    async def exec(self, _consulta):
+    async def exec(self, _consulta, params=None):
+        if params is not None:
+            self.eventos.append("lock")
         return ResultadoFalso(self.conversacion)
 
     def add(self, conversacion: Conversacion):
@@ -89,7 +91,7 @@ def test_dispatcher_persiste_antes_de_enviar_respuestas():
     )
     sesion = SesionFalsa(conversacion)
 
-    def handler(_mensaje, _contexto, _cliente):
+    def handler(_mensaje, _contexto, _cliente, _primera_interaccion):
         return ResultadoHandler(
             siguiente_estado=EstadoConversacion.MENU_PRINCIPAL,
             contexto={"paso": "menu"},
@@ -112,7 +114,7 @@ def test_dispatcher_persiste_antes_de_enviar_respuestas():
     assert conversacion.estado_anterior == EstadoConversacion.IDLE.value
     assert conversacion.estado_actual == EstadoConversacion.MENU_PRINCIPAL.value
     assert conversacion.contexto == {"paso": "menu"}
-    assert sesion.eventos == ["commit", "enviar"]
+    assert sesion.eventos == ["lock", "commit", "enviar"]
 
 
 def test_transicion_invalida_hace_rollback_y_no_envia():
@@ -123,7 +125,7 @@ def test_transicion_invalida_hace_rollback_y_no_envia():
     )
     sesion = SesionFalsa(conversacion)
 
-    def handler(_mensaje, _contexto, _cliente):
+    def handler(_mensaje, _contexto, _cliente, _primera_interaccion):
         return ResultadoHandler(
             siguiente_estado=EstadoConversacion.REVISANDO_RESUMEN,
             contexto={},
@@ -144,7 +146,7 @@ def test_transicion_invalida_hace_rollback_y_no_envia():
 
     assert resultado is None
     assert conversacion.estado_actual == EstadoConversacion.MENU_PRINCIPAL.value
-    assert sesion.eventos == ["rollback"]
+    assert sesion.eventos == ["lock", "rollback"]
 
 
 def test_estado_sin_handler_falla_con_error_claro():
@@ -158,14 +160,14 @@ def test_estado_sin_handler_falla_con_error_claro():
     with pytest.raises(HandlerNoRegistradoError, match="IDLE"):
         asyncio.run(DispatcherConversacion({}).procesar(sesion, cliente, _mensaje()))
 
-    assert sesion.eventos == ["rollback"]
+    assert sesion.eventos == ["lock", "rollback"]
 
 
 def test_dispatcher_crea_conversacion_idle_si_el_cliente_no_tenia_una():
     cliente = _cliente()
     sesion = SesionFalsa(conversacion=None)
 
-    def handler(_mensaje, _contexto, _cliente):
+    def handler(_mensaje, _contexto, _cliente, _primera_interaccion):
         return ResultadoHandler(
             siguiente_estado=EstadoConversacion.MENU_PRINCIPAL,
             contexto={},

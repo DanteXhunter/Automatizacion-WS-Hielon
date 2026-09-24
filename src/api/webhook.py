@@ -6,6 +6,16 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
 from src.config import settings
+from src.fsm.dispatcher import DispatcherConversacion, normalizar_mensaje
+from src.fsm.handlers.idle import atender_idle
+from src.fsm.handlers.menu_principal import atender_asesor, atender_menu_principal
+from src.fsm.handlers.pedido import (
+    atender_captura_cantidad,
+    atender_carrito,
+    atender_seleccion_producto,
+)
+from src.fsm.states import EstadoConversacion
+from src.models.cliente import Cliente
 from src.services.cliente_service import get_or_create_por_telefono
 from src.services.mensaje_service import registrar_mensaje_entrante
 from src.whatsapp.client import WhatsAppAPIError, WhatsAppClient
@@ -14,6 +24,16 @@ from src.whatsapp.signature import validar_firma
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+dispatcher = DispatcherConversacion(
+    {
+        EstadoConversacion.IDLE: atender_idle,
+        EstadoConversacion.MENU_PRINCIPAL: atender_menu_principal,
+        EstadoConversacion.EN_ASESOR_HUMANO: atender_asesor,
+        EstadoConversacion.SELECCIONANDO_PRODUCTO: atender_seleccion_producto,
+        EstadoConversacion.CAPTURANDO_CANTIDAD: atender_captura_cantidad,
+        EstadoConversacion.AGREGAR_MAS_O_CONTINUAR: atender_carrito,
+    }
+)
 
 
 @router.get("/webhook/whatsapp", response_class=PlainTextResponse)
@@ -59,8 +79,7 @@ async def recibir_evento(
     modelo Pydantic para el body: un payload con forma inesperada produciría un
     422 automático, que Meta leería como fallo.
 
-    Registra cada mensaje nuevo antes de programar el echo provisional. Los
-    handlers de pedidos se conectarán al dispatcher en los próximos issues.
+    Registra cada mensaje nuevo antes de programar su paso por la FSM.
 
     Args:
         request: Petición cruda; el body se lee en bytes sin parsear primero.
@@ -83,13 +102,14 @@ async def recibir_evento(
 
     try:
         payload = json.loads(cuerpo)
-        destinatarios = await _registrar_eventos(payload)
+        eventos = await _registrar_eventos(payload)
         cliente_whatsapp: WhatsAppClient = request.app.state.whatsapp_client
-        for destinatario in destinatarios:
+        for cliente, mensaje in eventos:
             background_tasks.add_task(
-                _responder_echo,
+                _procesar_mensaje,
                 cliente_whatsapp,
-                destinatario,
+                cliente,
+                mensaje,
             )
     except json.JSONDecodeError:
         logger.warning("El body del webhook no es JSON válido; se ignora")
@@ -99,8 +119,8 @@ async def recibir_evento(
     return {"status": "received"}
 
 
-async def _registrar_eventos(payload: Any) -> list[str]:
-    """Registra eventos y devuelve teléfonos con mensaje nuevo para el echo.
+async def _registrar_eventos(payload: Any) -> list[tuple[Cliente, dict[str, Any]]]:
+    """Registra eventos y devuelve los mensajes nuevos para la FSM.
 
     Meta anida los eventos en entry[] -> changes[] -> value, y ambas son listas
     que pueden traer varios elementos en un mismo request. Dentro de value
@@ -111,16 +131,16 @@ async def _registrar_eventos(payload: Any) -> list[str]:
         payload: Body del webhook ya parseado. Puede tener cualquier forma; el
             llamador atrapa lo que falle.
     """
-    destinatarios: list[str] = []
+    eventos: list[tuple[Cliente, dict[str, Any]]] = []
 
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
 
             for mensaje in value.get("messages", []):
-                destinatario = await _registrar_mensaje_entrante(value, mensaje)
-                if destinatario is not None:
-                    destinatarios.append(destinatario)
+                cliente = await _registrar_mensaje_entrante(value, mensaje)
+                if cliente is not None:
+                    eventos.append((cliente, mensaje))
 
             for status in value.get("statuses", []):
                 logger.info(
@@ -130,24 +150,49 @@ async def _registrar_eventos(payload: Any) -> list[str]:
                     status.get("recipient_id"),
                 )
 
-    return destinatarios
+    return eventos
 
 
-async def _responder_echo(
+async def _procesar_mensaje(
     cliente_whatsapp: WhatsAppClient,
-    destinatario: str,
+    cliente: Cliente,
+    mensaje: dict[str, Any],
 ) -> None:
-    """Envía el echo sin convertir un fallo de Meta en un fallo del webhook."""
+    """Aplica la FSM y envía sus respuestas después de guardar el nuevo estado."""
+    from src.database import session_factory
+
+    async def enviar_mensajes(
+        destinatario: Cliente, mensajes: list[dict[str, Any]]
+    ) -> None:
+        telefono = destinatario.telefono.removeprefix("+")
+        for saliente in mensajes:
+            if saliente["type"] == "interactive":
+                await cliente_whatsapp.enviar_interactivo(
+                    telefono, saliente["interactive"]
+                )
+            elif saliente["type"] == "text":
+                await cliente_whatsapp.enviar_texto(telefono, saliente["body"])
+
     try:
-        await cliente_whatsapp.enviar_texto(destinatario, "Recibí tu mensaje")
+        async with session_factory() as session:
+            await dispatcher.procesar(
+                session,
+                cliente,
+                normalizar_mensaje(mensaje),
+                enviar_mensajes=enviar_mensajes,
+            )
     except WhatsAppAPIError:
-        logger.exception("No se pudo enviar el echo al destinatario")
+        logger.exception("No se pudo enviar una respuesta al cliente_id=%s", cliente.id)
+    except Exception:
+        logger.exception(
+            "No se pudo procesar la conversación del cliente_id=%s", cliente.id
+        )
 
 
 async def _registrar_mensaje_entrante(
     value: dict[str, Any],
     mensaje: dict[str, Any],
-) -> str | None:
+) -> Cliente | None:
     """Persiste un mensaje nuevo antes de permitir efectos conversacionales."""
     whatsapp_message_id = mensaje.get("id")
     telefono = mensaje.get("from")
@@ -181,7 +226,7 @@ async def _registrar_mensaje_entrante(
         telefono,
         mensaje.get("type"),
     )
-    return telefono
+    return cliente
 
 
 def _obtener_nombre_del_perfil(value: dict[str, Any], telefono: str) -> str | None:
