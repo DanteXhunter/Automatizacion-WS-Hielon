@@ -46,6 +46,7 @@ class ResultadoHandler:
 
 HandlerConversacion = Callable[..., ResultadoHandler | Awaitable[ResultadoHandler]]
 EmisorMensajes = Callable[[Cliente, list[dict[str, Any]]], Awaitable[None]]
+NotificadorHandoff = Callable[[Cliente, str, MensajeEntrante], Awaitable[None]]
 
 
 class HandlerNoRegistradoError(LookupError):
@@ -102,13 +103,25 @@ class DispatcherConversacion:
         mensaje: MensajeEntrante,
         *,
         enviar_mensajes: EmisorMensajes | None = None,
+        notificar_handoff: NotificadorHandoff | None = None,
     ) -> ResultadoHandler | None:
         """Serializa por cliente y persiste el estado antes de enviar respuestas."""
+        nuevo_handoff = False
+        motivo_handoff = ""
         async with bloqueo_por_cliente(session, cliente.id):
             conversacion, primera_interaccion = (
                 await self._obtener_o_crear_conversacion(session, cliente.id)
             )
             estado_origen = EstadoConversacion(conversacion.estado_actual)
+            if estado_origen == EstadoConversacion.EN_ASESOR_HUMANO:
+                conversacion.ultima_interaccion = datetime.now(timezone.utc)
+                await session.commit()
+                return ResultadoHandler(
+                    EstadoConversacion.EN_ASESOR_HUMANO,
+                    conversacion.contexto.copy(),
+                    [],
+                )
+
             handler = self._handlers.get(estado_origen)
             if handler is None:
                 raise HandlerNoRegistradoError(
@@ -161,6 +174,23 @@ class DispatcherConversacion:
                 await session.rollback()
                 return None
 
+            nuevo_handoff = (
+                estado_origen != EstadoConversacion.EN_ASESOR_HUMANO
+                and resultado.siguiente_estado == EstadoConversacion.EN_ASESOR_HUMANO
+            )
+            if nuevo_handoff:
+                motivo_handoff = str(
+                    resultado.contexto.get(
+                        "handoff_motivo",
+                        "Escalamiento automático",
+                    )
+                )
+                resultado.contexto["handoff_motivo"] = motivo_handoff
+                resultado.contexto["handoff_desde"] = estado_origen.value
+                resultado.contexto["handoff_iniciado_en"] = datetime.now(
+                    timezone.utc
+                ).isoformat()
+
             conversacion.estado_anterior = estado_origen.value
             conversacion.estado_actual = resultado.siguiente_estado.value
             conversacion.contexto = resultado.contexto
@@ -177,6 +207,16 @@ class DispatcherConversacion:
                     conversacion.pedido_borrador_id = None
             conversacion.ultima_interaccion = datetime.now(timezone.utc)
             await session.commit()
+
+        if nuevo_handoff and notificar_handoff is not None:
+            try:
+                await notificar_handoff(cliente, motivo_handoff, mensaje)
+            except Exception:
+                logger.exception(
+                    "La notificación de handoff falló sin revertir el estado | "
+                    "cliente_id=%s",
+                    cliente.id,
+                )
 
         if enviar_mensajes is not None and resultado.mensajes_salientes:
             await enviar_mensajes(cliente, resultado.mensajes_salientes)

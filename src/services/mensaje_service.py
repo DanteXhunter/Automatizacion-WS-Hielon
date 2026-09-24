@@ -1,6 +1,7 @@
 """Persistencia idempotente de eventos de mensajes de WhatsApp."""
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -37,3 +38,32 @@ async def registrar_mensaje_entrante(
     await session.commit()
 
     return mensaje_id is not None
+
+
+async def registrar_mensaje_saliente(
+    session: AsyncSession,
+    *,
+    cliente_id: UUID,
+    whatsapp_message_id: str,
+    tipo: str,
+    contenido: dict[str, Any],
+    pricing_category: str,
+    costo_estimado: Decimal,
+    pedido_id: UUID | None = None,
+) -> Mensaje:
+    """Guarda el resultado aceptado por Meta con su categoría y costo snapshot."""
+    mensaje = Mensaje(
+        cliente_id=cliente_id,
+        direccion=DireccionMensaje.SALIENTE,
+        whatsapp_message_id=whatsapp_message_id,
+        tipo=tipo,
+        contenido=contenido,
+        estado="sent",
+        pricing_category=pricing_category,
+        costo_estimado=costo_estimado,
+        pedido_id=pedido_id,
+        created_at=datetime.now(timezone.utc),
+    )
+    session.add(mensaje)
+    await session.commit()
+    return mensaje

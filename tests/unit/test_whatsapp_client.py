@@ -219,3 +219,53 @@ async def test_envia_list_message_con_las_opciones_del_resumen():
         await cliente.aclose()
 
     assert message_id == "wamid.resumen"
+
+
+@pytest.mark.asyncio
+async def test_envia_plantilla_utility_con_parametros_en_orden():
+    async def responder(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload == {
+            "messaging_product": "whatsapp",
+            "to": "5214777654321",
+            "type": "template",
+            "template": {
+                "name": "handoff_asesor",
+                "language": {"code": "es_MX"},
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": "Restaurante Norte"},
+                            {"type": "text", "text": "+5214771234567"},
+                            {"type": "text", "text": "Solicitud del cliente"},
+                            {"type": "text", "text": "Quiero negociar"},
+                        ],
+                    }
+                ],
+            },
+        }
+        return httpx.Response(200, json={"messages": [{"id": "wamid.plantilla"}]})
+
+    cliente = WhatsAppClient(
+        TOKEN_PRUEBA,
+        PHONE_NUMBER_ID_PRUEBA,
+        transport=httpx.MockTransport(responder),
+        sleeper=no_esperar,
+    )
+    try:
+        message_id = await cliente.enviar_plantilla(
+            "5214777654321",
+            "handoff_asesor",
+            "es_MX",
+            [
+                "Restaurante Norte",
+                "+5214771234567",
+                "Solicitud del cliente",
+                "Quiero negociar",
+            ],
+        )
+    finally:
+        await cliente.aclose()
+
+    assert message_id == "wamid.plantilla"

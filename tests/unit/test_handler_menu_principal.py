@@ -110,4 +110,7 @@ def test_asesor_y_tres_entradas_invalidas_silencian_el_bot() -> None:
     assert asesor.siguiente_estado == EstadoConversacion.EN_ASESOR_HUMANO
     assert invalido.siguiente_estado == EstadoConversacion.EN_ASESOR_HUMANO
     assert invalido.contexto["intentos_invalidos"] == 3
-    assert asesor.mensajes_salientes == invalido.mensajes_salientes == []
+    assert asesor.contexto["handoff_motivo"] == "Solicitud del cliente"
+    assert invalido.contexto["handoff_motivo"] == "3 intentos inválidos en el menú"
+    assert "en un momento" in asesor.mensajes_salientes[0]["body"]
+    assert "en un momento" in invalido.mensajes_salientes[0]["body"]

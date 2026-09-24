@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.config import settings
 from src.fsm.dispatcher import MensajeEntrante, ResultadoHandler
 from src.fsm.handlers.menu_principal import crear_selector_productos
 from src.fsm.states import EstadoConversacion
@@ -25,6 +26,7 @@ from src.services.pedido_service import (
     obtener_borrador,
     vaciar_items_borrador,
 )
+from src.utils.datetime import ahora_local, es_horario_laboral, paso_hora_corte
 
 ACCIONES_RESUMEN = (
     ("confirmar", "Confirmar pedido"),
@@ -32,6 +34,12 @@ ACCIONES_RESUMEN = (
     ("cancelar", "Cancelar pedido"),
     ("asesor", "Hablar con asesor"),
 )
+
+
+def debe_sugerir_entrega_manana() -> bool:
+    """Limita la advertencia al periodo hábil posterior al corte."""
+    momento = ahora_local()
+    return es_horario_laboral(momento) and paso_hora_corte(momento)
 
 
 def _botones(opciones: tuple[tuple[str, str], ...]) -> list[dict[str, Any]]:
@@ -114,7 +122,20 @@ async def crear_mensaje_resumen(
     detalle_direccion = direccion.texto or (
         f"Ubicación ({direccion.latitud}, {direccion.longitud})"
     )
-    lineas = ["Resumen de tu pedido:", ""]
+    lineas: list[str] = []
+    if debe_sugerir_entrega_manana():
+        corte = settings.hora_corte_mismo_dia.strftime("%H:%M")
+        lineas.extend(
+            [
+                (
+                    f"Ya pasó nuestro horario de corte de las {corte}. "
+                    "Este pedido probablemente saldría mañana temprano. "
+                    "Si lo necesitas hoy, con gusto te comunicamos con un asesor."
+                ),
+                "",
+            ]
+        )
+    lineas.extend(["Resumen de tu pedido:", ""])
     lineas.extend(
         f"- {item.cantidad} x {producto.nombre} .......... ${item.subtotal:.2f}"
         for item, producto in items
@@ -175,7 +196,17 @@ async def atender_revision_resumen(
             [crear_mensaje_cancelacion()],
         )
     if mensaje.tipo == "boton" and mensaje.valor == "asesor":
-        return ResultadoHandler(EstadoConversacion.EN_ASESOR_HUMANO, contexto, [])
+        contexto["handoff_motivo"] = "Solicitud del cliente"
+        return ResultadoHandler(
+            EstadoConversacion.EN_ASESOR_HUMANO,
+            contexto,
+            [
+                {
+                    "type": "text",
+                    "body": "Te comunico con un asesor, en un momento te atienden.",
+                }
+            ],
+        )
     if mensaje.tipo == "boton" and mensaje.valor == "confirmar":
         try:
             confirmacion = await confirmar_pedido(
@@ -282,6 +313,7 @@ async def atender_seleccion_modificacion(
                 )
             productos = await listar_productos_activos(session)
             if not productos:
+                contexto["handoff_motivo"] = "Catálogo no disponible"
                 return ResultadoHandler(
                     EstadoConversacion.EN_ASESOR_HUMANO,
                     contexto,

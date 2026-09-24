@@ -9,10 +9,14 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
-from src.fsm.dispatcher import DispatcherConversacion, normalizar_mensaje
+from src.fsm.dispatcher import (
+    DispatcherConversacion,
+    MensajeEntrante,
+    normalizar_mensaje,
+)
 from src.fsm.handlers.direccion import atender_captura_direccion
 from src.fsm.handlers.idle import atender_idle
-from src.fsm.handlers.menu_principal import atender_asesor, atender_menu_principal
+from src.fsm.handlers.menu_principal import atender_menu_principal
 from src.fsm.handlers.pedido import (
     atender_captura_cantidad,
     atender_carrito,
@@ -26,6 +30,7 @@ from src.fsm.handlers.pedido_finalizacion import (
 from src.fsm.states import EstadoConversacion
 from src.models.cliente import Cliente
 from src.models.conversacion import Conversacion
+from src.notifications.whatsapp_admin import notificar_handoff as avisar_administrador
 from src.services.cliente_service import get_or_create_por_telefono
 from src.services.locks import bloqueo_por_cliente
 from src.services.mensaje_service import registrar_mensaje_entrante
@@ -46,7 +51,6 @@ dispatcher = DispatcherConversacion(
     {
         EstadoConversacion.IDLE: atender_idle,
         EstadoConversacion.MENU_PRINCIPAL: atender_menu_principal,
-        EstadoConversacion.EN_ASESOR_HUMANO: atender_asesor,
         EstadoConversacion.SELECCIONANDO_PRODUCTO: atender_seleccion_producto,
         EstadoConversacion.CAPTURANDO_CANTIDAD: atender_captura_cantidad,
         EstadoConversacion.AGREGAR_MAS_O_CONTINUAR: atender_carrito,
@@ -183,6 +187,8 @@ async def _procesar_mensaje(
     """Aplica la FSM y envía sus respuestas después de guardar el nuevo estado."""
     from src.database import session_factory
 
+    mensaje_normalizado = normalizar_mensaje(mensaje)
+
     async def enviar_mensajes(
         destinatario: Cliente, mensajes: list[dict[str, Any]]
     ) -> None:
@@ -194,6 +200,21 @@ async def _procesar_mensaje(
                 )
             elif saliente["type"] == "text":
                 await cliente_whatsapp.enviar_texto(telefono, saliente["body"])
+
+    async def notificar_handoff(
+        destinatario: Cliente,
+        motivo: str,
+        entrada: MensajeEntrante,
+    ) -> None:
+        ultimo_mensaje = _describir_mensaje(entrada)
+        async with session_factory() as session_notificacion:
+            await avisar_administrador(
+                session_notificacion,
+                cliente_whatsapp,
+                destinatario,
+                motivo=motivo,
+                ultimo_mensaje=ultimo_mensaje,
+            )
 
     try:
         async with session_factory() as session:
@@ -212,8 +233,9 @@ async def _procesar_mensaje(
             await dispatcher.procesar(
                 session,
                 cliente,
-                normalizar_mensaje(mensaje),
+                mensaje_normalizado,
                 enviar_mensajes=enviar_mensajes,
+                notificar_handoff=notificar_handoff,
             )
     except WhatsAppAPIError:
         logger.exception("No se pudo enviar una respuesta al cliente_id=%s", cliente.id)
@@ -240,6 +262,11 @@ async def _registrar_aviso_fuera_de_horario(
         if conversacion is None:
             conversacion = Conversacion(cliente_id=cliente.id)
             session.add(conversacion)
+
+        if conversacion.estado_actual == EstadoConversacion.EN_ASESOR_HUMANO.value:
+            conversacion.ultima_interaccion = momento.astimezone(timezone.utc)
+            await session.commit()
+            return False
 
         contexto = conversacion.contexto.copy()
         ultimo_texto = contexto.get("ultimo_aviso_fuera_horario")
@@ -316,3 +343,13 @@ def _obtener_nombre_del_perfil(value: dict[str, Any], telefono: str) -> str | No
         return nombre if isinstance(nombre, str) else None
 
     return None
+
+
+def _describir_mensaje(mensaje: MensajeEntrante) -> str:
+    """Prefiere el título visible de un botón para que el aviso sea entendible."""
+    if mensaje.tipo == "boton":
+        interactivo = mensaje.payload.get("interactive", {})
+        respuesta = interactivo.get("button_reply") or interactivo.get("list_reply")
+        if isinstance(respuesta, dict) and isinstance(respuesta.get("title"), str):
+            return respuesta["title"]
+    return mensaje.valor or f"Mensaje de tipo {mensaje.tipo}"
