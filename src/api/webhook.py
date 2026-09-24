@@ -9,6 +9,11 @@ from src.config import settings
 from src.fsm.dispatcher import DispatcherConversacion, normalizar_mensaje
 from src.fsm.handlers.idle import atender_idle
 from src.fsm.handlers.menu_principal import atender_asesor, atender_menu_principal
+from src.fsm.handlers.pedido import (
+    atender_captura_cantidad,
+    atender_carrito,
+    atender_seleccion_producto,
+)
 from src.fsm.states import EstadoConversacion
 from src.models.cliente import Cliente
 from src.services.cliente_service import get_or_create_por_telefono
@@ -24,6 +29,9 @@ dispatcher = DispatcherConversacion(
         EstadoConversacion.IDLE: atender_idle,
         EstadoConversacion.MENU_PRINCIPAL: atender_menu_principal,
         EstadoConversacion.EN_ASESOR_HUMANO: atender_asesor,
+        EstadoConversacion.SELECCIONANDO_PRODUCTO: atender_seleccion_producto,
+        EstadoConversacion.CAPTURANDO_CANTIDAD: atender_captura_cantidad,
+        EstadoConversacion.AGREGAR_MAS_O_CONTINUAR: atender_carrito,
     }
 )
 

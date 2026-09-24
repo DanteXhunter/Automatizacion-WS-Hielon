@@ -1,5 +1,6 @@
 """Enrutamiento transaccional de mensajes hacia handlers de conversación."""
 
+import inspect
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -39,10 +40,7 @@ class ResultadoHandler:
     mensajes_salientes: list[dict[str, Any]]
 
 
-HandlerConversacion = Callable[
-    [MensajeEntrante, dict[str, Any], Cliente, bool],
-    ResultadoHandler,
-]
+HandlerConversacion = Callable[..., ResultadoHandler | Awaitable[ResultadoHandler]]
 EmisorMensajes = Callable[[Cliente, list[dict[str, Any]]], Awaitable[None]]
 
 
@@ -126,7 +124,16 @@ class DispatcherConversacion:
                         "estado": pedido.estado.value,
                     }
 
-            resultado = handler(mensaje, contexto_handler, cliente, primera_interaccion)
+            parametros = inspect.signature(handler).parameters
+            argumentos = (mensaje, contexto_handler, cliente, primera_interaccion)
+            if "session" in parametros:
+                kwargs: dict[str, Any] = {"session": session}
+                if "pedido_borrador_id" in parametros:
+                    kwargs["pedido_borrador_id"] = conversacion.pedido_borrador_id
+                respuesta = handler(*argumentos, **kwargs)
+            else:
+                respuesta = handler(*argumentos)
+            resultado = await respuesta if inspect.isawaitable(respuesta) else respuesta
             if not es_transicion_valida(estado_origen, resultado.siguiente_estado):
                 logger.warning(
                     "Transición inválida descartada | cliente_id=%s origen=%s destino=%s",
@@ -140,6 +147,12 @@ class DispatcherConversacion:
             conversacion.estado_anterior = estado_origen.value
             conversacion.estado_actual = resultado.siguiente_estado.value
             conversacion.contexto = resultado.contexto
+            borrador_id = resultado.contexto.get("pedido_borrador_id")
+            if isinstance(borrador_id, str):
+                try:
+                    conversacion.pedido_borrador_id = UUID(borrador_id)
+                except ValueError:
+                    conversacion.pedido_borrador_id = None
             conversacion.ultima_interaccion = datetime.now(timezone.utc)
             await session.commit()
 

@@ -2,9 +2,13 @@
 
 from typing import Any
 
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from src.fsm.dispatcher import MensajeEntrante, ResultadoHandler
 from src.fsm.states import EstadoConversacion
 from src.models.cliente import Cliente
+from src.models.producto import Producto
+from src.services.pedido_service import listar_productos_activos
 
 BOTONES_MENU = (
     ("hacer_pedido", "Hacer pedido"),
@@ -32,38 +36,56 @@ def crear_menu(texto: str = "¿En qué te ayudo?") -> dict[str, Any]:
     }
 
 
-def atender_menu_principal(
+def crear_selector_productos(productos: list[Producto]) -> dict[str, Any]:
+    """Construye Reply Buttons con UUIDs de catálogo, nunca nombres codificados."""
+    # Meta limita los Reply Buttons a tres; si el catálogo supera ese número,
+    # migrar este selector a List Message (no ampliar el arreglo de botones).
+    return {
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": "¿Qué presentación de hielo necesitas?"},
+            "action": {
+                "buttons": _botones(
+                    tuple(
+                        (str(producto.id), producto.nombre[:20])
+                        for producto in productos[:3]
+                    )
+                )
+            },
+        },
+    }
+
+
+async def atender_menu_principal(
     mensaje: MensajeEntrante,
     contexto: dict[str, Any],
     _cliente: Cliente,
     _primera_interaccion: bool,
+    *,
+    session: AsyncSession,
 ) -> ResultadoHandler:
     """Enruta usando el ID estable del botón, nunca su título visible."""
     if mensaje.tipo == "boton" and mensaje.valor in {id for id, _ in BOTONES_MENU}:
         contexto.pop("intentos_invalidos", None)
 
         if mensaje.valor == "hacer_pedido":
+            productos = await listar_productos_activos(session)
+            if not productos:
+                return ResultadoHandler(
+                    siguiente_estado=EstadoConversacion.EN_ASESOR_HUMANO,
+                    contexto=contexto,
+                    mensajes_salientes=[
+                        {
+                            "type": "text",
+                            "body": "No puedo mostrar productos ahora. Te comunico con un asesor.",
+                        }
+                    ],
+                )
             return ResultadoHandler(
                 siguiente_estado=EstadoConversacion.SELECCIONANDO_PRODUCTO,
                 contexto=contexto,
-                mensajes_salientes=[
-                    {
-                        "type": "interactive",
-                        "interactive": {
-                            "type": "button",
-                            "body": {"text": "¿Qué presentación de hielo necesitas?"},
-                            "action": {
-                                "buttons": _botones(
-                                    (
-                                        ("bolsa_3kg", "Bolsa 3 kg"),
-                                        ("bolsa_5kg", "Bolsa 5 kg"),
-                                        ("bolsa_10kg", "Bolsa 10 kg"),
-                                    )
-                                )
-                            },
-                        },
-                    }
-                ],
+                mensajes_salientes=[crear_selector_productos(productos)],
             )
 
         if mensaje.valor == "consultar":

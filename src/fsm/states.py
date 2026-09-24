@@ -36,6 +36,7 @@ TRANSICIONES_VALIDAS: dict[EstadoConversacion, frozenset[EstadoConversacion]] = 
             EstadoConversacion.MENU_PRINCIPAL,
             EstadoConversacion.CAPTURANDO_CANTIDAD,
             EstadoConversacion.CONFIRMANDO_CANCELACION,
+            EstadoConversacion.EN_ASESOR_HUMANO,
         }
     ),
     EstadoConversacion.CAPTURANDO_CANTIDAD: frozenset(
@@ -44,6 +45,7 @@ TRANSICIONES_VALIDAS: dict[EstadoConversacion, frozenset[EstadoConversacion]] = 
             EstadoConversacion.SELECCIONANDO_PRODUCTO,
             EstadoConversacion.AGREGAR_MAS_O_CONTINUAR,
             EstadoConversacion.CONFIRMANDO_CANCELACION,
+            EstadoConversacion.EN_ASESOR_HUMANO,
         }
     ),
     EstadoConversacion.AGREGAR_MAS_O_CONTINUAR: frozenset(
@@ -53,6 +55,7 @@ TRANSICIONES_VALIDAS: dict[EstadoConversacion, frozenset[EstadoConversacion]] = 
             EstadoConversacion.SELECCIONANDO_PRODUCTO,
             EstadoConversacion.CAPTURANDO_DIRECCION,
             EstadoConversacion.CONFIRMANDO_CANCELACION,
+            EstadoConversacion.EN_ASESOR_HUMANO,
         }
     ),
     EstadoConversacion.CAPTURANDO_DIRECCION: frozenset(
