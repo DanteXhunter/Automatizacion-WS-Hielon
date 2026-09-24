@@ -2,10 +2,11 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
 from src.config import settings
+from src.whatsapp.client import WhatsAppAPIError, WhatsAppClient
 from src.whatsapp.signature import validar_firma
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,10 @@ async def verificar_webhook(
 
 
 @router.post("/webhook/whatsapp")
-async def recibir_evento(request: Request) -> dict[str, str]:
+async def recibir_evento(
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
     """Recibe los eventos de Meta, los registra y acusa recibo de inmediato.
 
     Este endpoint responde 200 pase lo que pase. Meta reintenta con backoff
@@ -72,11 +76,22 @@ async def recibir_evento(request: Request) -> dict[str, str]:
     if not validar_firma(cuerpo, firma, secreto):
         raise HTTPException(status_code=403, detail="Firma inválida")
 
-    logger.info("Webhook recibido (%d bytes): %s", len(cuerpo), cuerpo.decode("utf-8", "replace"))
+    logger.info(
+        "Webhook recibido (%d bytes): %s",
+        len(cuerpo),
+        cuerpo.decode("utf-8", "replace"),
+    )
 
     try:
         payload = json.loads(cuerpo)
-        _registrar_eventos(payload)
+        destinatarios = _registrar_eventos(payload)
+        cliente_whatsapp: WhatsAppClient = request.app.state.whatsapp_client
+        for destinatario in destinatarios:
+            background_tasks.add_task(
+                _responder_echo,
+                cliente_whatsapp,
+                destinatario,
+            )
     except json.JSONDecodeError:
         logger.warning("El body del webhook no es JSON válido; se ignora")
     except Exception:
@@ -85,8 +100,8 @@ async def recibir_evento(request: Request) -> dict[str, str]:
     return {"status": "received"}
 
 
-def _registrar_eventos(payload: Any) -> None:
-    """Recorre el payload de Meta y loguea por separado mensajes y statuses.
+def _registrar_eventos(payload: Any) -> list[str]:
+    """Registra los eventos y devuelve los teléfonos que requieren respuesta.
 
     Meta anida los eventos en entry[] -> changes[] -> value, y ambas son listas
     que pueden traer varios elementos en un mismo request. Dentro de value
@@ -97,6 +112,8 @@ def _registrar_eventos(payload: Any) -> None:
         payload: Body del webhook ya parseado. Puede tener cualquier forma; el
             llamador atrapa lo que falle.
     """
+    destinatarios: list[str] = []
+
     for entry in payload.get("entry", []):
         for change in entry.get("changes", []):
             value = change.get("value", {})
@@ -108,6 +125,9 @@ def _registrar_eventos(payload: Any) -> None:
                     mensaje.get("from"),
                     mensaje.get("type"),
                 )
+                destinatario = mensaje.get("from")
+                if isinstance(destinatario, str) and destinatario:
+                    destinatarios.append(destinatario)
 
             for status in value.get("statuses", []):
                 logger.info(
@@ -116,3 +136,16 @@ def _registrar_eventos(payload: Any) -> None:
                     status.get("status"),
                     status.get("recipient_id"),
                 )
+
+    return destinatarios
+
+
+async def _responder_echo(
+    cliente_whatsapp: WhatsAppClient,
+    destinatario: str,
+) -> None:
+    """Envía el echo sin convertir un fallo de Meta en un fallo del webhook."""
+    try:
+        await cliente_whatsapp.enviar_texto(destinatario, "Recibí tu mensaje")
+    except WhatsAppAPIError:
+        logger.exception("No se pudo enviar el echo al destinatario")
