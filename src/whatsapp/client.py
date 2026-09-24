@@ -118,6 +118,34 @@ class WhatsAppClient:
             }
         )
 
+    async def enviar_plantilla(
+        self,
+        destinatario: str,
+        nombre: str,
+        idioma: str,
+        parametros: list[str],
+    ) -> str:
+        """Envía una plantilla aprobada con parámetros de texto en el body."""
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": destinatario,
+            "type": "template",
+            "template": {
+                "name": nombre,
+                "language": {"code": idioma},
+                "components": [
+                    {
+                        "type": "body",
+                        "parameters": [
+                            {"type": "text", "text": parametro}
+                            for parametro in parametros
+                        ],
+                    }
+                ],
+            },
+        }
+        return await self._enviar_payload(payload)
+
     async def _enviar_payload(self, payload: dict[str, Any]) -> str:
         """Comparte manejo de errores y reintentos entre texto y botones."""
 

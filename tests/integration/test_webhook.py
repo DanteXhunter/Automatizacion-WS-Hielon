@@ -11,11 +11,28 @@ from fastapi.testclient import TestClient
 
 from src.api import webhook
 from src.config import settings
+from src.fsm.dispatcher import normalizar_mensaje
 from src.main import app
 from src.models.cliente import Cliente
 from src.models.conversacion import Conversacion
 
 client = TestClient(app)
+
+
+def test_descripcion_de_handoff_usa_titulo_visible_del_boton():
+    mensaje = normalizar_mensaje(
+        {
+            "type": "interactive",
+            "interactive": {
+                "button_reply": {
+                    "id": "asesor",
+                    "title": "Hablar con asesor",
+                }
+            },
+        }
+    )
+
+    assert webhook._describir_mensaje(mensaje) == "Hablar con asesor"
 
 
 def test_post_webhook_con_firma_invalida_devuelve_403():
@@ -158,3 +175,48 @@ async def test_aviso_fuera_de_horario_conserva_estado_y_contexto(monkeypatch):
     assert conversacion.estado_actual == "CAPTURANDO_DIRECCION"
     assert conversacion.contexto["pedido_borrador_id"] == "pedido-1"
     assert session.commits == 2
+
+
+@pytest.mark.asyncio
+async def test_fuera_de_horario_tambien_respeta_el_silencio_del_handoff(monkeypatch):
+    cliente = Cliente(telefono="+5214771234567")
+    conversacion = Conversacion(
+        cliente_id=cliente.id,
+        estado_actual="EN_ASESOR_HUMANO",
+        contexto={"handoff_motivo": "Solicitud del cliente"},
+    )
+
+    class Resultado:
+        def first(self):
+            return conversacion
+
+    class Sesion:
+        commits = 0
+
+        async def exec(self, _consulta):
+            return Resultado()
+
+        async def commit(self):
+            self.commits += 1
+
+        def add(self, _objeto):
+            raise AssertionError("La conversación ya existe")
+
+    @asynccontextmanager
+    async def sin_lock(_session, _cliente_id):
+        yield
+
+    monkeypatch.setattr(webhook, "bloqueo_por_cliente", sin_lock)
+    session = Sesion()
+    instante = datetime(2026, 9, 27, 22, 0, tzinfo=ZoneInfo("America/Mexico_City"))
+
+    enviar_aviso = await webhook._registrar_aviso_fuera_de_horario(
+        session,
+        cliente,
+        instante=instante,
+    )
+
+    assert enviar_aviso is False
+    assert conversacion.estado_actual == "EN_ASESOR_HUMANO"
+    assert conversacion.contexto == {"handoff_motivo": "Solicitud del cliente"}
+    assert session.commits == 1

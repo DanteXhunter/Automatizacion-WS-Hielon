@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from src.api.admin import router as admin_router
 from src.api.health import router as health_router
 from src.api.webhook import router as webhook_router
 from src.config import settings
@@ -33,3 +34,4 @@ app = FastAPI(
 )
 app.include_router(health_router)
 app.include_router(webhook_router)
+app.include_router(admin_router)

@@ -78,6 +78,7 @@ async def atender_menu_principal(
         if mensaje.valor == "hacer_pedido":
             productos = await listar_productos_activos(session)
             if not productos:
+                contexto["handoff_motivo"] = "Catálogo no disponible"
                 return ResultadoHandler(
                     siguiente_estado=EstadoConversacion.EN_ASESOR_HUMANO,
                     contexto=contexto,
@@ -111,35 +112,32 @@ async def atender_menu_principal(
 
         return ResultadoHandler(
             siguiente_estado=EstadoConversacion.EN_ASESOR_HUMANO,
-            contexto=contexto,
-            mensajes_salientes=[],
+            contexto={**contexto, "handoff_motivo": "Solicitud del cliente"},
+            mensajes_salientes=[
+                {
+                    "type": "text",
+                    "body": "Te comunico con un asesor, en un momento te atienden.",
+                }
+            ],
         )
 
     intentos = int(contexto.get("intentos_invalidos", 0)) + 1
     contexto["intentos_invalidos"] = intentos
     if intentos >= 3:
+        contexto["handoff_motivo"] = "3 intentos inválidos en el menú"
         return ResultadoHandler(
             siguiente_estado=EstadoConversacion.EN_ASESOR_HUMANO,
             contexto=contexto,
-            mensajes_salientes=[],
+            mensajes_salientes=[
+                {
+                    "type": "text",
+                    "body": "Te comunico con un asesor, en un momento te atienden.",
+                }
+            ],
         )
 
     return ResultadoHandler(
         siguiente_estado=EstadoConversacion.MENU_PRINCIPAL,
         contexto=contexto,
         mensajes_salientes=[crear_menu("Por favor elige una de las opciones.")],
-    )
-
-
-def atender_asesor(
-    _mensaje: MensajeEntrante,
-    contexto: dict[str, Any],
-    _cliente: Cliente,
-    _primera_interaccion: bool,
-) -> ResultadoHandler:
-    """Mantiene silenciado al bot cuando la conversación espera a un humano."""
-    return ResultadoHandler(
-        siguiente_estado=EstadoConversacion.EN_ASESOR_HUMANO,
-        contexto=contexto,
-        mensajes_salientes=[],
     )

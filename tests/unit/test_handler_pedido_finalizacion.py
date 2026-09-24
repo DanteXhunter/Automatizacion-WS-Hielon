@@ -1,7 +1,9 @@
 """Pruebas de resumen, modificación y cancelación del borrador."""
 
+from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -63,6 +65,7 @@ async def test_resumen_usa_total_de_items_y_lista_las_cuatro_acciones(monkeypatc
         "calcular_total_borrador",
         lambda *_args: _async_value(Decimal("37.50")),
     )
+    monkeypatch.setattr(finalizacion, "debe_sugerir_entrega_manana", lambda: True)
 
     mensaje = await finalizacion.crear_mensaje_resumen(
         SesionFalsa(), CLIENTE, PEDIDO.id
@@ -82,6 +85,34 @@ async def test_resumen_usa_total_de_items_y_lista_las_cuatro_acciones(monkeypatc
     assert "Calle Norte 25" in texto
     assert "Total: $37.50" in texto
     assert "no incluyen IVA ni envío" in texto
+    assert texto.startswith("Ya pasó nuestro horario de corte de las 14:00")
+
+
+def test_sugerencia_de_manana_solo_aplica_despues_del_corte_en_dia_habil(
+    monkeypatch,
+):
+    zona = ZoneInfo("America/Mexico_City")
+
+    monkeypatch.setattr(
+        finalizacion,
+        "ahora_local",
+        lambda: datetime(2026, 9, 21, 13, 59, tzinfo=zona),
+    )
+    assert finalizacion.debe_sugerir_entrega_manana() is False
+
+    monkeypatch.setattr(
+        finalizacion,
+        "ahora_local",
+        lambda: datetime(2026, 9, 21, 14, 1, tzinfo=zona),
+    )
+    assert finalizacion.debe_sugerir_entrega_manana() is True
+
+    monkeypatch.setattr(
+        finalizacion,
+        "ahora_local",
+        lambda: datetime(2026, 9, 27, 14, 1, tzinfo=zona),
+    )
+    assert finalizacion.debe_sugerir_entrega_manana() is False
 
 
 def _async_value(valor):
@@ -108,6 +139,26 @@ async def test_acciones_no_terminales_del_resumen_enrutan_a_sus_estados():
             pedido_borrador_id=PEDIDO.id,
         )
         assert resultado.siguiente_estado == estado
+
+
+@pytest.mark.asyncio
+async def test_hablar_con_asesor_conserva_borrador_y_confirma_al_cliente():
+    contexto = {"pedido_borrador_id": str(PEDIDO.id), "carrito": "intacto"}
+
+    resultado = await finalizacion.atender_revision_resumen(
+        _mensaje("asesor"),
+        contexto,
+        CLIENTE,
+        False,
+        session=SesionFalsa(),
+        pedido_borrador_id=PEDIDO.id,
+    )
+
+    assert resultado.siguiente_estado == EstadoConversacion.EN_ASESOR_HUMANO
+    assert resultado.contexto["pedido_borrador_id"] == str(PEDIDO.id)
+    assert resultado.contexto["carrito"] == "intacto"
+    assert resultado.contexto["handoff_motivo"] == "Solicitud del cliente"
+    assert "en un momento" in resultado.mensajes_salientes[0]["body"]
 
 
 @pytest.mark.asyncio

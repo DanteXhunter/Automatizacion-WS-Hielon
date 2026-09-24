@@ -325,3 +325,95 @@ def test_volver_en_estado_sin_regreso_se_ignora_sin_mensaje():
     assert resultado is not None
     assert resultado.siguiente_estado == EstadoConversacion.MENU_PRINCIPAL
     assert resultado.mensajes_salientes == []
+
+
+@pytest.mark.asyncio
+async def test_handoff_silencia_solo_a_su_cliente_mientras_otro_continua():
+    cliente_humano = Cliente(telefono="+5214771111111")
+    cliente_bot = Cliente(telefono="+5214772222222")
+    conversacion_humana = Conversacion(
+        cliente_id=cliente_humano.id,
+        estado_actual=EstadoConversacion.EN_ASESOR_HUMANO.value,
+        contexto={"handoff_motivo": "Solicitud del cliente"},
+    )
+    conversacion_bot = Conversacion(
+        cliente_id=cliente_bot.id,
+        estado_actual=EstadoConversacion.IDLE.value,
+    )
+    session_humana = SesionFalsa(conversacion_humana)
+    session_bot = SesionFalsa(conversacion_bot)
+    envios = []
+
+    def handler_idle(_mensaje, contexto, _cliente, _primera_interaccion):
+        return ResultadoHandler(
+            EstadoConversacion.MENU_PRINCIPAL,
+            contexto,
+            [{"type": "text", "body": "Menú"}],
+        )
+
+    async def enviar(cliente, mensajes):
+        envios.append((cliente.telefono, mensajes))
+
+    dispatcher = DispatcherConversacion({EstadoConversacion.IDLE: handler_idle})
+    resultado_humano, resultado_bot = await asyncio.gather(
+        dispatcher.procesar(
+            session_humana,
+            cliente_humano,
+            _mensaje(),
+            enviar_mensajes=enviar,
+        ),
+        dispatcher.procesar(
+            session_bot,
+            cliente_bot,
+            _mensaje(),
+            enviar_mensajes=enviar,
+        ),
+    )
+
+    assert resultado_humano is not None and resultado_bot is not None
+    assert resultado_humano.mensajes_salientes == []
+    assert conversacion_humana.estado_actual == EstadoConversacion.EN_ASESOR_HUMANO
+    assert conversacion_humana.contexto == {"handoff_motivo": "Solicitud del cliente"}
+    assert resultado_bot.siguiente_estado == EstadoConversacion.MENU_PRINCIPAL
+    assert [telefono for telefono, _ in envios] == [cliente_bot.telefono]
+
+
+def test_nuevo_handoff_se_persiste_antes_de_notificar_y_responder():
+    cliente = _cliente()
+    conversacion = Conversacion(
+        cliente_id=cliente.id,
+        estado_actual=EstadoConversacion.MENU_PRINCIPAL.value,
+    )
+    sesion = SesionFalsa(conversacion)
+
+    def handler(_mensaje, contexto, _cliente, _primera_interaccion):
+        contexto["handoff_motivo"] = "Solicitud del cliente"
+        return ResultadoHandler(
+            EstadoConversacion.EN_ASESOR_HUMANO,
+            contexto,
+            [{"type": "text", "body": "Te comunico con un asesor"}],
+        )
+
+    async def notificar(_cliente, motivo, mensaje):
+        assert motivo == "Solicitud del cliente"
+        assert mensaje.valor == "hola"
+        sesion.eventos.append("notificar")
+
+    async def enviar(_cliente, _mensajes):
+        sesion.eventos.append("enviar")
+
+    resultado = asyncio.run(
+        DispatcherConversacion({EstadoConversacion.MENU_PRINCIPAL: handler}).procesar(
+            sesion,
+            cliente,
+            _mensaje(),
+            enviar_mensajes=enviar,
+            notificar_handoff=notificar,
+        )
+    )
+
+    assert resultado is not None
+    assert conversacion.estado_actual == EstadoConversacion.EN_ASESOR_HUMANO
+    assert conversacion.contexto["handoff_desde"] == EstadoConversacion.MENU_PRINCIPAL
+    assert "handoff_iniciado_en" in conversacion.contexto
+    assert sesion.eventos == ["lock", "commit", "notificar", "enviar"]
