@@ -3,6 +3,7 @@ import hmac
 
 from fastapi.testclient import TestClient
 
+from src.api import webhook
 from src.config import settings
 from src.main import app
 
@@ -28,6 +29,11 @@ def test_mensaje_entrante_programa_respuesta_echo(monkeypatch):
             return "wamid.prueba"
 
     cliente_falso = ClienteWhatsAppFalso()
+
+    async def registrar_mensaje_nuevo(_value, mensaje):
+        return mensaje["from"]
+
+    monkeypatch.setattr(webhook, "_registrar_mensaje_entrante", registrar_mensaje_nuevo)
     monkeypatch.setattr(
         app.state,
         "whatsapp_client",
