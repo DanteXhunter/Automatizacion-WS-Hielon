@@ -110,7 +110,7 @@ El árbol completo documentado más abajo es un **mapa de destino**, no una tare
 
 **Por qué**, dado que el objetivo es aprender: 30 carpetas vacías con `__init__.py` no enseñan nada y producen la sensación de trabajar dentro de un molde ajeno. El costo de mover código a su lugar definitivo después es trivial; el costo de la estructura prematura es no aprender.
 
-**Fase 1 — archivos que sí existen** (5, nada más):
+**Fase 1 — archivos iniciales** (referencia histórica de esa etapa):
 
 ```
 src/main.py                 ← ensamblaje de la app FastAPI
@@ -120,7 +120,7 @@ src/whatsapp/signature.py   ← validación HMAC (función pura, testeable)
 src/whatsapp/client.py      ← wrapper httpx sobre la Graph API
 ```
 
-`models/`, `fsm/`, `services/`, `notifications/`, `utils/` **no existen** hasta que su fase los necesite.
+Desde la Fase 2 también existen `models/`, `fsm/` y `services/`. `notifications/` y `utils/` siguen pendientes hasta que sus fases los necesiten. La estructura vigente se resume en `README.md`.
 
 **Layout `src/`**: se adopta porque es el estándar de la industria en Python. La razón técnica de fondo (resolución de imports y el fallo "en mi máquina sí jala") se explica en la Fase 5, cuando se despliegue y el problema sea tangible. Pendiente explícitamente diferido, no olvidado.
 
@@ -590,11 +590,13 @@ automatizacion-ws-hielon/
 - Nombres en `snake_case`; clases en `PascalCase`; constantes en `SCREAMING_SNAKE_CASE`.
 
 ### Git
-- Rama principal: `main`.
-- Rama de trabajo por issue: `feature/{issue-number}-descripcion-corta`.
-- Commits en imperativo, español o inglés (consistente), max 72 chars primera línea.
-- Un PR por issue, con checklist en descripción.
-- Squash merge a `main`.
+- Rama de integración actual: `dev`; `main` se reserva para versiones estables.
+- Rama de trabajo por bloque: `feature/{primer-issue}-{ultimo-issue}-descripcion-corta`.
+- Agrupar normalmente cuatro issues por commit; usar menos si son grandes y más si son pequeños.
+- El asistente prepara código, pruebas y comandos, pero el desarrollador ejecuta los commits y pushes. No agregar atribución del asistente en el historial del repositorio.
+- Título de commit: acción concreta, en imperativo y de máximo 72 caracteres.
+- Cuerpo de cada commit: (1) enumerar el trabajo realizado por issue, (2) agregar una línea `Closes #N` por cada issue realmente resuelto, y (3) indicar los siguientes issues que se trabajarán. En el próximo commit se regularizará el cierre de issues de commits anteriores que ya estén integrados.
+- Los cierres automáticos de GitHub se aplican al integrarse en la rama predeterminada. Si el PR apunta a `dev`, comprobar el estado del issue tras la integración o cerrarlo desde GitHub cuando corresponda.
 
 ### Testing
 - Unit tests para: FSM transitions, servicios de negocio, validación HMAC.

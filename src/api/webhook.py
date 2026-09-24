@@ -6,6 +6,8 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 
 from src.config import settings
+from src.services.cliente_service import get_or_create_por_telefono
+from src.services.mensaje_service import registrar_mensaje_entrante
 from src.whatsapp.client import WhatsAppAPIError, WhatsAppClient
 from src.whatsapp.signature import validar_firma
 
@@ -57,7 +59,8 @@ async def recibir_evento(
     modelo Pydantic para el body: un payload con forma inesperada produciría un
     422 automático, que Meta leería como fallo.
 
-    De momento solo registra lo que llega. El procesamiento real es Fase 2.
+    Registra cada mensaje nuevo antes de programar el echo provisional. Los
+    handlers de pedidos se conectarán al dispatcher en los próximos issues.
 
     Args:
         request: Petición cruda; el body se lee en bytes sin parsear primero.
@@ -76,15 +79,11 @@ async def recibir_evento(
     if not validar_firma(cuerpo, firma, secreto):
         raise HTTPException(status_code=403, detail="Firma inválida")
 
-    logger.info(
-        "Webhook recibido (%d bytes): %s",
-        len(cuerpo),
-        cuerpo.decode("utf-8", "replace"),
-    )
+    logger.info("Webhook recibido (%d bytes)", len(cuerpo))
 
     try:
         payload = json.loads(cuerpo)
-        destinatarios = _registrar_eventos(payload)
+        destinatarios = await _registrar_eventos(payload)
         cliente_whatsapp: WhatsAppClient = request.app.state.whatsapp_client
         for destinatario in destinatarios:
             background_tasks.add_task(
@@ -100,8 +99,8 @@ async def recibir_evento(
     return {"status": "received"}
 
 
-def _registrar_eventos(payload: Any) -> list[str]:
-    """Registra los eventos y devuelve los teléfonos que requieren respuesta.
+async def _registrar_eventos(payload: Any) -> list[str]:
+    """Registra eventos y devuelve teléfonos con mensaje nuevo para el echo.
 
     Meta anida los eventos en entry[] -> changes[] -> value, y ambas son listas
     que pueden traer varios elementos en un mismo request. Dentro de value
@@ -119,14 +118,8 @@ def _registrar_eventos(payload: Any) -> list[str]:
             value = change.get("value", {})
 
             for mensaje in value.get("messages", []):
-                logger.info(
-                    "Mensaje entrante | id=%s de=%s tipo=%s",
-                    mensaje.get("id"),
-                    mensaje.get("from"),
-                    mensaje.get("type"),
-                )
-                destinatario = mensaje.get("from")
-                if isinstance(destinatario, str) and destinatario:
+                destinatario = await _registrar_mensaje_entrante(value, mensaje)
+                if destinatario is not None:
                     destinatarios.append(destinatario)
 
             for status in value.get("statuses", []):
@@ -149,3 +142,56 @@ async def _responder_echo(
         await cliente_whatsapp.enviar_texto(destinatario, "Recibí tu mensaje")
     except WhatsAppAPIError:
         logger.exception("No se pudo enviar el echo al destinatario")
+
+
+async def _registrar_mensaje_entrante(
+    value: dict[str, Any],
+    mensaje: dict[str, Any],
+) -> str | None:
+    """Persiste un mensaje nuevo antes de permitir efectos conversacionales."""
+    whatsapp_message_id = mensaje.get("id")
+    telefono = mensaje.get("from")
+    if not isinstance(whatsapp_message_id, str) or not isinstance(telefono, str):
+        logger.warning("Mensaje entrante sin id o teléfono; se ignora")
+        return None
+
+    from src.database import session_factory
+
+    async with session_factory() as session:
+        cliente = await get_or_create_por_telefono(
+            session,
+            telefono,
+            _obtener_nombre_del_perfil(value, telefono),
+        )
+        es_nuevo = await registrar_mensaje_entrante(
+            session,
+            cliente_id=cliente.id,
+            whatsapp_message_id=whatsapp_message_id,
+            tipo=str(mensaje.get("type", "desconocido")),
+            contenido=mensaje,
+        )
+
+    if not es_nuevo:
+        logger.info("Mensaje duplicado ignorado | id=%s", whatsapp_message_id)
+        return None
+
+    logger.info(
+        "Mensaje entrante registrado | id=%s de=%s tipo=%s",
+        whatsapp_message_id,
+        telefono,
+        mensaje.get("type"),
+    )
+    return telefono
+
+
+def _obtener_nombre_del_perfil(value: dict[str, Any], telefono: str) -> str | None:
+    """Extrae el nombre de perfil del contacto que mandó el mensaje."""
+    for contacto in value.get("contacts", []):
+        if contacto.get("wa_id") != telefono:
+            continue
+
+        perfil = contacto.get("profile", {})
+        nombre = perfil.get("name")
+        return nombre if isinstance(nombre, str) else None
+
+    return None
