@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from src.api.health import router as health_router
 from src.api.webhook import router as webhook_router
 from src.config import settings
+from src.database import engine
 from src.whatsapp.client import WhatsAppClient
 
 
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await cliente_whatsapp.aclose()
+        await engine.dispose()
 
 
 app = FastAPI(
