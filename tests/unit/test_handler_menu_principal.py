@@ -66,11 +66,11 @@ def test_hacer_pedido_enruta_por_id_y_reinicia_intentos() -> None:
     )
     assert resultado.siguiente_estado == EstadoConversacion.SELECCIONANDO_PRODUCTO
     assert "intentos_invalidos" not in resultado.contexto
-    boton = resultado.mensajes_salientes[0]["interactive"]["action"]["buttons"][0][
-        "reply"
+    filas = resultado.mensajes_salientes[0]["interactive"]["action"]["sections"][0][
+        "rows"
     ]
-    assert boton["id"] == str(producto.id)
-    assert boton["title"] == "Bolsa 5 kg"
+    assert filas[0] == {"id": str(producto.id), "title": "Bolsa 5 kg"}
+    assert filas[-1] == {"id": "volver", "title": "Volver"}
 
 
 def test_titulo_visible_no_sustituye_id_del_boton() -> None:

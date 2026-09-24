@@ -13,7 +13,13 @@ from src.models.cliente import Cliente
 from src.models.direccion import Direccion
 from src.models.pedido import EstadoPedido
 from src.services.pedido_service import (
+    PedidoNoEncontradoError,
+    PedidoSinDireccionError,
+    PedidoSinItemsError,
+    TransicionPedidoInvalidaError,
     calcular_total_borrador,
+    cambiar_estado,
+    confirmar_pedido,
     listar_items_borrador,
     listar_productos_activos,
     obtener_borrador,
@@ -171,8 +177,68 @@ async def atender_revision_resumen(
     if mensaje.tipo == "boton" and mensaje.valor == "asesor":
         return ResultadoHandler(EstadoConversacion.EN_ASESOR_HUMANO, contexto, [])
     if mensaje.tipo == "boton" and mensaje.valor == "confirmar":
-        # El cambio transaccional del borrador a pendiente se implementa después.
-        return ResultadoHandler(EstadoConversacion.IDLE, contexto, [])
+        try:
+            confirmacion = await confirmar_pedido(
+                session,
+                cliente.id,
+                pedido_borrador_id,
+            )
+        except PedidoSinItemsError:
+            contexto.pop("producto_actual", None)
+            productos = await listar_productos_activos(session)
+            return ResultadoHandler(
+                EstadoConversacion.SELECCIONANDO_PRODUCTO,
+                contexto,
+                (
+                    [crear_selector_productos(productos)]
+                    if productos
+                    else [
+                        {
+                            "type": "text",
+                            "body": "Tu pedido no tiene productos y no hay catálogo disponible. Te comunico con un asesor.",
+                        }
+                    ]
+                ),
+            )
+        except PedidoSinDireccionError:
+            from src.fsm.handlers.direccion import mensaje_inicial_direccion
+
+            return ResultadoHandler(
+                EstadoConversacion.CAPTURANDO_DIRECCION,
+                contexto,
+                [await mensaje_inicial_direccion(session, cliente.id)],
+            )
+        except (PedidoNoEncontradoError, TransicionPedidoInvalidaError):
+            contexto.clear()
+            contexto["_limpiar_pedido_borrador"] = True
+            return ResultadoHandler(
+                EstadoConversacion.IDLE,
+                contexto,
+                [
+                    {
+                        "type": "text",
+                        "body": "No pude confirmar ese borrador. Escribe nuevamente para iniciar un pedido.",
+                    }
+                ],
+            )
+
+        pedido = confirmacion.pedido
+        contexto.clear()
+        contexto["_limpiar_pedido_borrador"] = True
+        texto = (
+            f"¡Listo! Tu pedido #{pedido.numero_orden} quedó registrado.\n"
+            f"Total: ${pedido.total:.2f}. Te avisamos cuando vaya en camino."
+        )
+        if confirmacion.es_primer_pedido:
+            texto += (
+                "\nNuestro equipo confirmará el horario de entrega. "
+                "El pago se realiza contra entrega."
+            )
+        return ResultadoHandler(
+            EstadoConversacion.IDLE,
+            contexto,
+            [{"type": "text", "body": texto}],
+        )
 
     resumen = await crear_mensaje_resumen(session, cliente, pedido_borrador_id)
     return ResultadoHandler(
@@ -255,12 +321,6 @@ async def atender_seleccion_modificacion(
             contexto,
             [await mensaje_inicial_direccion(session, cliente.id)],
         )
-    if mensaje.tipo == "boton" and mensaje.valor == "volver":
-        return ResultadoHandler(
-            EstadoConversacion.REVISANDO_RESUMEN,
-            contexto,
-            [await crear_mensaje_resumen(session, cliente, pedido_borrador_id)],
-        )
     return ResultadoHandler(
         EstadoConversacion.SELECCIONANDO_MODIFICACION,
         contexto,
@@ -312,7 +372,7 @@ async def atender_confirmacion_cancelacion(
                 ],
             )
 
-        pedido.estado = EstadoPedido.CANCELADO_CLIENTE
+        cambiar_estado(pedido, EstadoPedido.CANCELADO_CLIENTE)
         contexto.clear()
         contexto["_limpiar_pedido_borrador"] = True
         return ResultadoHandler(

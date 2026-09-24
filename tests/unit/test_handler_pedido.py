@@ -135,46 +135,6 @@ async def test_cantidad_valida_crea_item_y_muestra_carrito_desde_totales_db(
 
 
 @pytest.mark.asyncio
-async def test_volver_desde_carrito_elimina_el_ultimo_item_y_reabre_su_producto(
-    monkeypatch,
-):
-    pedido = Pedido(id=uuid4(), cliente_id=CLIENTE.id)
-    item = SimpleNamespace(
-        id=uuid4(),
-        cantidad=2,
-        subtotal=Decimal("25.00"),
-        precio_unitario=Decimal("12.50"),
-    )
-    eliminados = []
-
-    async def obtener_o_crear(_session, _cliente_id, _borrador_id):
-        return pedido
-
-    async def listar(_session, _pedido_id):
-        return [(item, PRODUCTO)]
-
-    async def eliminar(_session, _pedido, item_id):
-        eliminados.append(item_id)
-        return True
-
-    monkeypatch.setattr(handler_pedido, "obtener_o_crear_borrador", obtener_o_crear)
-    monkeypatch.setattr(handler_pedido, "listar_items_borrador", listar)
-    monkeypatch.setattr(handler_pedido, "eliminar_item_borrador", eliminar)
-    resultado = await handler_pedido.atender_carrito(
-        _mensaje("volver", "boton"),
-        {"ultimo_item_id": str(item.id)},
-        CLIENTE,
-        False,
-        session=SesionFalsa(),
-        pedido_borrador_id=pedido.id,
-    )
-
-    assert eliminados == [item.id]
-    assert resultado.siguiente_estado == EstadoConversacion.CAPTURANDO_CANTIDAD
-    assert resultado.contexto["producto_actual"] == str(PRODUCTO.id)
-
-
-@pytest.mark.asyncio
 async def test_carrito_muestra_tres_items_y_recalcula_el_total(monkeypatch):
     pedido = Pedido(id=uuid4(), cliente_id=CLIENTE.id)
     productos = [

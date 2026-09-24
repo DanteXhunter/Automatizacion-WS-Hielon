@@ -11,7 +11,11 @@ from uuid import UUID
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from src.fsm.states import EstadoConversacion, es_transicion_valida
+from src.fsm.states import (
+    TRANSICIONES_ATRAS,
+    EstadoConversacion,
+    es_transicion_valida,
+)
 from src.models.cliente import Cliente
 from src.models.conversacion import Conversacion
 from src.services.locks import bloqueo_por_cliente
@@ -124,16 +128,29 @@ class DispatcherConversacion:
                         "estado": pedido.estado.value,
                     }
 
-            parametros = inspect.signature(handler).parameters
-            argumentos = (mensaje, contexto_handler, cliente, primera_interaccion)
-            if "session" in parametros:
-                kwargs: dict[str, Any] = {"session": session}
-                if "pedido_borrador_id" in parametros:
-                    kwargs["pedido_borrador_id"] = conversacion.pedido_borrador_id
-                respuesta = handler(*argumentos, **kwargs)
+            resultado_atras = await self._resolver_volver(
+                session,
+                cliente,
+                conversacion,
+                estado_origen,
+                mensaje,
+                contexto_handler,
+            )
+            if resultado_atras is not None:
+                resultado = resultado_atras
             else:
-                respuesta = handler(*argumentos)
-            resultado = await respuesta if inspect.isawaitable(respuesta) else respuesta
+                parametros = inspect.signature(handler).parameters
+                argumentos = (mensaje, contexto_handler, cliente, primera_interaccion)
+                if "session" in parametros:
+                    kwargs: dict[str, Any] = {"session": session}
+                    if "pedido_borrador_id" in parametros:
+                        kwargs["pedido_borrador_id"] = conversacion.pedido_borrador_id
+                    respuesta = handler(*argumentos, **kwargs)
+                else:
+                    respuesta = handler(*argumentos)
+                resultado = (
+                    await respuesta if inspect.isawaitable(respuesta) else respuesta
+                )
             if not es_transicion_valida(estado_origen, resultado.siguiente_estado):
                 logger.warning(
                     "Transición inválida descartada | cliente_id=%s origen=%s destino=%s",
@@ -167,6 +184,124 @@ class DispatcherConversacion:
         return resultado
 
     @staticmethod
+    async def _resolver_volver(
+        session: AsyncSession,
+        cliente: Cliente,
+        conversacion: Conversacion,
+        estado_origen: EstadoConversacion,
+        mensaje: MensajeEntrante,
+        contexto: dict[str, Any],
+    ) -> ResultadoHandler | None:
+        """Resuelve navegación atrás y sus limpiezas antes de invocar handlers."""
+        if mensaje.tipo != "boton" or mensaje.valor != "volver":
+            return None
+        destino = TRANSICIONES_ATRAS.get(estado_origen)
+        if destino is None:
+            return ResultadoHandler(estado_origen, contexto, [])
+
+        # Los imports locales evitan ciclos: los handlers importan los tipos
+        # MensajeEntrante y ResultadoHandler de este mismo módulo.
+        from src.fsm.handlers.menu_principal import crear_menu, crear_selector_productos
+        from src.fsm.handlers.pedido import (
+            crear_mensaje_carrito,
+            crear_pregunta_cantidad,
+        )
+        from src.fsm.handlers.pedido_finalizacion import crear_mensaje_resumen
+        from src.services.pedido_service import (
+            calcular_total_borrador,
+            eliminar_item_borrador,
+            listar_items_borrador,
+            listar_productos_activos,
+            obtener_borrador,
+        )
+
+        if estado_origen == EstadoConversacion.SELECCIONANDO_PRODUCTO:
+            contexto.pop("producto_actual", None)
+            return ResultadoHandler(destino, contexto, [crear_menu()])
+
+        if estado_origen == EstadoConversacion.CAPTURANDO_CANTIDAD:
+            contexto.pop("producto_actual", None)
+            productos = await listar_productos_activos(session)
+            mensajes = (
+                [crear_selector_productos(productos)]
+                if productos
+                else [{"type": "text", "body": "No hay productos disponibles."}]
+            )
+            return ResultadoHandler(destino, contexto, mensajes)
+
+        if estado_origen == EstadoConversacion.AGREGAR_MAS_O_CONTINUAR:
+            pedido = await obtener_borrador(
+                session,
+                cliente.id,
+                conversacion.pedido_borrador_id,
+            )
+            if pedido is not None:
+                items = await listar_items_borrador(session, pedido.id)
+                ultimo_id = _uuid_opcional(contexto.get("ultimo_item_id"))
+                ultimo = next(
+                    (
+                        (item, producto)
+                        for item, producto in items
+                        if item.id == ultimo_id
+                    ),
+                    None,
+                )
+                if ultimo is not None:
+                    item, producto = ultimo
+                    await eliminar_item_borrador(session, pedido, item.id)
+                    contexto["producto_actual"] = str(producto.id)
+                    contexto.pop("ultimo_item_id", None)
+                    return ResultadoHandler(
+                        destino,
+                        contexto,
+                        [crear_pregunta_cantidad(producto)],
+                    )
+
+            productos = await listar_productos_activos(session)
+            contexto.pop("ultimo_item_id", None)
+            return ResultadoHandler(
+                EstadoConversacion.SELECCIONANDO_PRODUCTO,
+                contexto,
+                (
+                    [crear_selector_productos(productos)]
+                    if productos
+                    else [{"type": "text", "body": "No hay productos disponibles."}]
+                ),
+            )
+
+        if estado_origen == EstadoConversacion.CAPTURANDO_DIRECCION:
+            pedido = await obtener_borrador(
+                session,
+                cliente.id,
+                conversacion.pedido_borrador_id,
+            )
+            if pedido is None:
+                return ResultadoHandler(
+                    destino,
+                    contexto,
+                    [{"type": "text", "body": "Regresamos a tu carrito."}],
+                )
+            items = await listar_items_borrador(session, pedido.id)
+            total = await calcular_total_borrador(session, pedido.id)
+            return ResultadoHandler(
+                destino,
+                contexto,
+                [crear_mensaje_carrito(items, total)],
+            )
+
+        return ResultadoHandler(
+            destino,
+            contexto,
+            [
+                await crear_mensaje_resumen(
+                    session,
+                    cliente,
+                    conversacion.pedido_borrador_id,
+                )
+            ],
+        )
+
+    @staticmethod
     async def _obtener_o_crear_conversacion(
         session: AsyncSession,
         cliente_id: UUID,
@@ -184,3 +319,13 @@ class DispatcherConversacion:
         )
         session.add(conversacion)
         return conversacion, True
+
+
+def _uuid_opcional(valor: Any) -> UUID | None:
+    """Convierte un UUID persistido en JSON sin propagar datos corruptos."""
+    if not isinstance(valor, str):
+        return None
+    try:
+        return UUID(valor)
+    except ValueError:
+        return None

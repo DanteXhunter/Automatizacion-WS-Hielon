@@ -1,5 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
+from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,6 +15,9 @@ from src.fsm.dispatcher import (
 from src.fsm.states import EstadoConversacion
 from src.models.cliente import Cliente
 from src.models.conversacion import Conversacion
+from src.models.pedido import Pedido
+from src.models.producto import Producto
+from src.services import pedido_service
 
 
 @dataclass
@@ -212,3 +217,111 @@ def test_dispatcher_limpia_el_puntero_del_borrador_al_cancelar():
     assert conversacion.estado_actual == EstadoConversacion.IDLE.value
     assert conversacion.pedido_borrador_id is None
     assert conversacion.contexto == {}
+
+
+def test_volver_se_intercepta_sin_invocar_el_handler_del_estado():
+    cliente = _cliente()
+    conversacion = Conversacion(
+        cliente_id=cliente.id,
+        estado_actual=EstadoConversacion.SELECCIONANDO_PRODUCTO.value,
+        contexto={"producto_actual": str(cliente.id)},
+    )
+    sesion = SesionFalsa(conversacion)
+
+    def handler(*_args):
+        raise AssertionError("El dispatcher debía interceptar Volver")
+
+    resultado = asyncio.run(
+        DispatcherConversacion(
+            {EstadoConversacion.SELECCIONANDO_PRODUCTO: handler}
+        ).procesar(
+            sesion,
+            cliente,
+            MensajeEntrante(tipo="boton", valor="volver", payload={}),
+        )
+    )
+
+    assert resultado is not None
+    assert resultado.siguiente_estado == EstadoConversacion.MENU_PRINCIPAL
+    assert "producto_actual" not in resultado.contexto
+
+
+def test_volver_dos_veces_limpia_item_y_regresa_a_productos(monkeypatch):
+    cliente = _cliente()
+    pedido = Pedido(id=cliente.id, cliente_id=cliente.id)
+    producto = Producto(
+        nombre="Bolsa 5 kg",
+        peso_kg=Decimal(5),
+        precio=Decimal("12.50"),
+    )
+    item = SimpleNamespace(id=producto.id)
+    conversacion = Conversacion(
+        cliente_id=cliente.id,
+        estado_actual=EstadoConversacion.AGREGAR_MAS_O_CONTINUAR.value,
+        pedido_borrador_id=pedido.id,
+        contexto={"ultimo_item_id": str(item.id)},
+    )
+    sesion = SesionFalsa(conversacion)
+    eliminados = []
+
+    async def obtener(_session, _cliente_id, _pedido_id):
+        return pedido
+
+    async def listar_items(_session, _pedido_id):
+        return [(item, producto)]
+
+    async def eliminar(_session, _pedido, item_id):
+        eliminados.append(item_id)
+        return True
+
+    async def listar_productos(_session):
+        return [producto]
+
+    monkeypatch.setattr(pedido_service, "obtener_borrador", obtener)
+    monkeypatch.setattr(pedido_service, "listar_items_borrador", listar_items)
+    monkeypatch.setattr(pedido_service, "eliminar_item_borrador", eliminar)
+    monkeypatch.setattr(pedido_service, "listar_productos_activos", listar_productos)
+
+    def handler(*_args):
+        raise AssertionError("El dispatcher debía interceptar Volver")
+
+    dispatcher = DispatcherConversacion(
+        {
+            EstadoConversacion.AGREGAR_MAS_O_CONTINUAR: handler,
+            EstadoConversacion.CAPTURANDO_CANTIDAD: handler,
+        }
+    )
+    mensaje = MensajeEntrante(tipo="boton", valor="volver", payload={})
+
+    primero = asyncio.run(dispatcher.procesar(sesion, cliente, mensaje))
+    segundo = asyncio.run(dispatcher.procesar(sesion, cliente, mensaje))
+
+    assert primero is not None and segundo is not None
+    assert eliminados == [item.id]
+    assert primero.siguiente_estado == EstadoConversacion.CAPTURANDO_CANTIDAD
+    assert segundo.siguiente_estado == EstadoConversacion.SELECCIONANDO_PRODUCTO
+    assert "producto_actual" not in segundo.contexto
+
+
+def test_volver_en_estado_sin_regreso_se_ignora_sin_mensaje():
+    cliente = _cliente()
+    conversacion = Conversacion(
+        cliente_id=cliente.id,
+        estado_actual=EstadoConversacion.MENU_PRINCIPAL.value,
+    )
+    sesion = SesionFalsa(conversacion)
+
+    def handler(*_args):
+        raise AssertionError("Un Volver no admitido no debe llegar al handler")
+
+    resultado = asyncio.run(
+        DispatcherConversacion({EstadoConversacion.MENU_PRINCIPAL: handler}).procesar(
+            sesion,
+            cliente,
+            MensajeEntrante(tipo="boton", valor="volver", payload={}),
+        )
+    )
+
+    assert resultado is not None
+    assert resultado.siguiente_estado == EstadoConversacion.MENU_PRINCIPAL
+    assert resultado.mensajes_salientes == []

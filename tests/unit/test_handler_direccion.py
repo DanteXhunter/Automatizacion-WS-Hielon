@@ -150,7 +150,7 @@ async def test_ubicacion_guarda_coordenadas_y_texto_del_payload(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_texto_corto_se_rechaza_y_volver_regresa_al_carrito():
+async def test_texto_corto_se_rechaza():
     corto = await handler_direccion.atender_captura_direccion(
         _mensaje("texto", "123"),
         {},
@@ -159,15 +159,5 @@ async def test_texto_corto_se_rechaza_y_volver_regresa_al_carrito():
         session=SesionFalsa(),
         pedido_borrador_id=PEDIDO.id,
     )
-    atras = await handler_direccion.atender_captura_direccion(
-        _mensaje("boton", "volver"),
-        {},
-        CLIENTE,
-        False,
-        session=SesionFalsa(),
-        pedido_borrador_id=PEDIDO.id,
-    )
-
     assert corto.siguiente_estado == EstadoConversacion.CAPTURANDO_DIRECCION
     assert "muy corta" in corto.mensajes_salientes[0]["body"]
-    assert atras.siguiente_estado == EstadoConversacion.AGREGAR_MAS_O_CONTINUAR

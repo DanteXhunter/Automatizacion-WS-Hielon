@@ -92,12 +92,11 @@ def _async_value(valor):
 
 
 @pytest.mark.asyncio
-async def test_acciones_del_resumen_enrutan_a_sus_estados():
+async def test_acciones_no_terminales_del_resumen_enrutan_a_sus_estados():
     esperados = {
         "modificar": EstadoConversacion.SELECCIONANDO_MODIFICACION,
         "cancelar": EstadoConversacion.CONFIRMANDO_CANCELACION,
         "asesor": EstadoConversacion.EN_ASESOR_HUMANO,
-        "confirmar": EstadoConversacion.IDLE,
     }
     for boton, estado in esperados.items():
         resultado = await finalizacion.atender_revision_resumen(
@@ -109,6 +108,38 @@ async def test_acciones_del_resumen_enrutan_a_sus_estados():
             pedido_borrador_id=PEDIDO.id,
         )
         assert resultado.siguiente_estado == estado
+
+
+@pytest.mark.asyncio
+async def test_confirmar_limpia_borrador_y_muestra_folio(monkeypatch):
+    pedido = Pedido(
+        id=PEDIDO.id,
+        cliente_id=CLIENTE.id,
+        estado=EstadoPedido.PENDIENTE,
+        numero_orden="2026-0142",
+        total=Decimal("37.50"),
+    )
+
+    async def confirmar(_session, _cliente_id, _pedido_id):
+        from src.services.pedido_service import ResultadoConfirmacionPedido
+
+        return ResultadoConfirmacionPedido(pedido=pedido, es_primer_pedido=True)
+
+    monkeypatch.setattr(finalizacion, "confirmar_pedido", confirmar)
+    resultado = await finalizacion.atender_revision_resumen(
+        _mensaje("confirmar"),
+        {"pedido_borrador_id": str(PEDIDO.id)},
+        CLIENTE,
+        False,
+        session=SesionFalsa(),
+        pedido_borrador_id=PEDIDO.id,
+    )
+
+    assert resultado.siguiente_estado == EstadoConversacion.IDLE
+    assert resultado.contexto == {"_limpiar_pedido_borrador": True}
+    assert "2026-0142" in resultado.mensajes_salientes[0]["body"]
+    assert "$37.50" in resultado.mensajes_salientes[0]["body"]
+    assert "contra entrega" in resultado.mensajes_salientes[0]["body"]
 
 
 @pytest.mark.asyncio

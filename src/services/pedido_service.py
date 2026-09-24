@@ -1,14 +1,170 @@
-"""Consultas y operaciones de pedidos usadas por la conversación."""
+"""Consultas y reglas transaccionales del ciclo de vida de los pedidos."""
 
+from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from src.models.direccion import Direccion
 from src.models.pedido import EstadoPedido, Pedido
 from src.models.pedido_item import PedidoItem
 from src.models.producto import Producto
+from src.utils.datetime import ahora_local
+
+
+class TransicionPedidoInvalidaError(ValueError):
+    """Impide mover un pedido a un estado incompatible con su ciclo de vida."""
+
+
+class PedidoNoEncontradoError(LookupError):
+    """Indica que el borrador solicitado no pertenece al cliente."""
+
+
+class PedidoSinItemsError(ValueError):
+    """Indica que un borrador vacío no puede confirmarse."""
+
+
+class PedidoSinDireccionError(ValueError):
+    """Indica que falta una dirección válida antes de confirmar."""
+
+
+TRANSICIONES_PEDIDO: dict[EstadoPedido, frozenset[EstadoPedido]] = {
+    EstadoPedido.BORRADOR: frozenset(
+        {EstadoPedido.PENDIENTE, EstadoPedido.CANCELADO_CLIENTE}
+    ),
+    EstadoPedido.PENDIENTE: frozenset(
+        {
+            EstadoPedido.PROGRAMADO,
+            EstadoPedido.EN_RUTA,
+            EstadoPedido.CANCELADO_NEGOCIO,
+            EstadoPedido.CANCELADO_CLIENTE,
+        }
+    ),
+    EstadoPedido.PROGRAMADO: frozenset(
+        {
+            EstadoPedido.EN_RUTA,
+            EstadoPedido.CANCELADO_NEGOCIO,
+            EstadoPedido.CANCELADO_CLIENTE,
+        }
+    ),
+    EstadoPedido.EN_RUTA: frozenset(
+        {EstadoPedido.ENTREGADO, EstadoPedido.CANCELADO_NEGOCIO}
+    ),
+    EstadoPedido.ENTREGADO: frozenset(),
+    EstadoPedido.CANCELADO_CLIENTE: frozenset(),
+    EstadoPedido.CANCELADO_NEGOCIO: frozenset(),
+}
+
+
+@dataclass(frozen=True)
+class ResultadoConfirmacionPedido:
+    """Datos que el handler necesita después de preparar el commit."""
+
+    pedido: Pedido
+    es_primer_pedido: bool
+    ya_estaba_confirmado: bool = False
+
+
+def cambiar_estado(pedido: Pedido, nuevo_estado: EstadoPedido) -> None:
+    """Aplica una transición válida; repetir el estado actual es un no-op."""
+    if pedido.estado == nuevo_estado:
+        return
+    permitidos = TRANSICIONES_PEDIDO[pedido.estado]
+    if nuevo_estado not in permitidos:
+        raise TransicionPedidoInvalidaError(
+            f"No se puede cambiar un pedido de {pedido.estado.value} "
+            f"a {nuevo_estado.value}."
+        )
+    pedido.estado = nuevo_estado
+
+
+async def generar_numero_orden(
+    session: AsyncSession,
+    *,
+    anio: int | None = None,
+) -> str:
+    """Reserva atómicamente el siguiente consecutivo del año en PostgreSQL."""
+    anio_folio = anio if anio is not None else ahora_local().year
+    resultado = await session.exec(
+        text("""
+            INSERT INTO folios_pedido_anuales (anio, ultimo_valor)
+            VALUES (:anio, 1)
+            ON CONFLICT (anio)
+            DO UPDATE SET ultimo_valor = folios_pedido_anuales.ultimo_valor + 1
+            RETURNING ultimo_valor
+            """),
+        params={"anio": anio_folio},
+    )
+    consecutivo = int(resultado.scalar_one())
+    return f"{anio_folio}-{consecutivo:04d}"
+
+
+async def confirmar_pedido(
+    session: AsyncSession,
+    cliente_id: UUID,
+    pedido_id: UUID | None,
+) -> ResultadoConfirmacionPedido:
+    """Valida y convierte un borrador en pendiente dentro de la sesión actual."""
+    if pedido_id is None:
+        raise PedidoNoEncontradoError("La conversación no tiene un borrador asociado.")
+
+    resultado = await session.exec(
+        select(Pedido)
+        .where(Pedido.id == pedido_id, Pedido.cliente_id == cliente_id)
+        .with_for_update()
+    )
+    pedido = resultado.first()
+    if pedido is None:
+        raise PedidoNoEncontradoError("No se encontró el pedido del cliente.")
+    if pedido.estado == EstadoPedido.PENDIENTE and pedido.numero_orden:
+        return ResultadoConfirmacionPedido(
+            pedido=pedido,
+            es_primer_pedido=False,
+            ya_estaba_confirmado=True,
+        )
+    if pedido.estado != EstadoPedido.BORRADOR:
+        raise TransicionPedidoInvalidaError(
+            f"El pedido está en estado {pedido.estado.value} y no puede confirmarse."
+        )
+
+    items = await listar_items_borrador(session, pedido.id)
+    if not items:
+        raise PedidoSinItemsError("El pedido no contiene productos.")
+    if pedido.direccion_id is None:
+        raise PedidoSinDireccionError("El pedido no tiene dirección de entrega.")
+    direccion = (
+        await session.exec(
+            select(Direccion).where(
+                Direccion.id == pedido.direccion_id,
+                Direccion.cliente_id == cliente_id,
+            )
+        )
+    ).first()
+    if direccion is None:
+        raise PedidoSinDireccionError("La dirección no pertenece al cliente.")
+
+    pedido_previo = (
+        await session.exec(
+            select(Pedido.id)
+            .where(
+                Pedido.cliente_id == cliente_id,
+                Pedido.id != pedido.id,
+                Pedido.estado != EstadoPedido.BORRADOR,
+            )
+            .limit(1)
+        )
+    ).first()
+    pedido.total = await calcular_total_borrador(session, pedido.id)
+    pedido.numero_orden = await generar_numero_orden(session)
+    cambiar_estado(pedido, EstadoPedido.PENDIENTE)
+    await session.flush()
+    return ResultadoConfirmacionPedido(
+        pedido=pedido,
+        es_primer_pedido=pedido_previo is None,
+    )
 
 
 async def listar_productos_activos(session: AsyncSession) -> list[Producto]:

@@ -8,7 +8,8 @@ Bloqueo externo: registrar y aprobar la plantilla `handoff_asesor` en Meta
 
 ## Objetivo
 
-Avisarle a Gabriel en tiempo real cuando una conversación necesita un humano.
+Avisarle al responsable operativo en tiempo real cuando una conversación
+necesita atención humana.
 
 ## Por qué WhatsApp y no Telegram (decisión revisada 6-ago-2026)
 
@@ -16,10 +17,10 @@ Originalmente este issue usaba Telegram. Se cambió porque **Gabriel no usa
 Telegram**: una notificación que llega a una app que el destinatario no abre no
 sirve de nada, por muy simple que sea su API.
 
-Se manda al **WhatsApp personal de Gabriel**, que es el que sí revisa. Ojo: no
-es el número del bot — ese está en Cloud API y perdió la app móvil (issue #3).
-Es un segundo número, el suyo de siempre, que recibe el aviso como cualquier
-otro mensaje.
+Se manda al **WhatsApp personal configurado para alertas**, inicialmente el de
+Gabriel. Es una notificación para que el responsable abra la conversación de
+Hielon en WhatsApp Business mediante Coexistence; no es el canal desde el que se
+responde al cliente.
 
 ## Por qué tiene que ser plantilla, no texto libre
 
@@ -86,7 +87,7 @@ Vive en `notifications/` y no en `whatsapp/` porque es una decisión de negocio
 ## Manejo de fallas
 
 Si el envío falla (plantilla no aprobada, número mal, rate limit), **se loguea
-el error pero no se rompe el webhook**. El cliente ya quedó en
+el error pero no se rompe el webhook**. Solo ese cliente ya quedó en
 `EN_ASESOR_HUMANO` y guardado en base; que falle la notificación no debe
 regresarlo al bot ni tumbar el request de Meta.
 
@@ -106,3 +107,6 @@ contaminar la métrica MSPC: se registran con `pedido_id` nulo.
 - [ ] Una falla de envío no propaga excepción al webhook
 - [ ] El fallo de notificación queda logueado para revisión manual
 - [ ] El mensaje queda registrado en `mensajes` con categoría y costo
+- [ ] La notificación identifica sin ambigüedad qué conversación debe abrirse
+      en WhatsApp Business
+- [ ] El handoff no silencia ni retrasa conversaciones de otros clientes

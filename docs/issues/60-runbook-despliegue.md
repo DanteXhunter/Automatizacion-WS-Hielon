@@ -26,6 +26,12 @@ presente.
 5. **Rotación del token de Meta**: cómo generar uno nuevo desde el System
    User sin tumbar el servicio (generar el nuevo, actualizarlo en Variables de
    Railway, esperar el redeploy automático, revocar el viejo)
+6. **Operación diaria**: cómo consultar pedidos confirmados, capturarlos en My
+   Business POS 2011, imprimir el ticket y actualizar su estado.
+7. **Handoff**: cómo detectar una conversación en espera, abrirla en WhatsApp
+   Business, responder, cerrarla y comprobar que el bot retoma solo ese chat.
+8. **Coexistence**: qué revisar si los mensajes manuales no aparecen, si el
+   webhook deja de recibir eventos o si la aplicación pierde acceso al número.
 
 ## Por qué esto no es opcional para un proyecto de portafolio
 
@@ -34,7 +40,9 @@ funcionar una vez en la demo. Es de las piezas que un revisor técnico nota.
 
 ## Criterio de aceptación
 
-- [ ] `docs/deployment.md` cubre los 5 puntos
+- [ ] `docs/deployment.md` cubre los 8 puntos
 - [ ] El procedimiento de respaldo se probó al menos una vez de punta a punta
       (respaldar y restaurar en una base de prueba)
 - [ ] Un tercero podría seguir el documento sin preguntar nada al desarrollador
+- [ ] La secretaria puede completar un pedido de prueba en My Business POS 2011
+      siguiendo únicamente el runbook

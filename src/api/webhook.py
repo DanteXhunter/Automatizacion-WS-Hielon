@@ -1,9 +1,12 @@
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
 from src.fsm.dispatcher import DispatcherConversacion, normalizar_mensaje
@@ -22,12 +25,21 @@ from src.fsm.handlers.pedido_finalizacion import (
 )
 from src.fsm.states import EstadoConversacion
 from src.models.cliente import Cliente
+from src.models.conversacion import Conversacion
 from src.services.cliente_service import get_or_create_por_telefono
+from src.services.locks import bloqueo_por_cliente
 from src.services.mensaje_service import registrar_mensaje_entrante
+from src.utils.datetime import ahora_local, es_horario_laboral
 from src.whatsapp.client import WhatsAppAPIError, WhatsAppClient
 from src.whatsapp.signature import validar_firma
 
 logger = logging.getLogger(__name__)
+
+AVISO_FUERA_DE_HORARIO = (
+    "Gracias por escribirnos. Nuestro horario es de lunes a sábado de "
+    "7:00 a 17:00. Te atendemos en cuanto abramos."
+)
+INTERVALO_AVISO_FUERA_DE_HORARIO = timedelta(hours=1)
 
 router = APIRouter()
 dispatcher = DispatcherConversacion(
@@ -185,6 +197,18 @@ async def _procesar_mensaje(
 
     try:
         async with session_factory() as session:
+            if not es_horario_laboral():
+                enviar_aviso = await _registrar_aviso_fuera_de_horario(
+                    session,
+                    cliente,
+                )
+                if enviar_aviso:
+                    telefono = cliente.telefono.removeprefix("+")
+                    await cliente_whatsapp.enviar_texto(
+                        telefono,
+                        AVISO_FUERA_DE_HORARIO,
+                    )
+                return
             await dispatcher.procesar(
                 session,
                 cliente,
@@ -197,6 +221,48 @@ async def _procesar_mensaje(
         logger.exception(
             "No se pudo procesar la conversación del cliente_id=%s", cliente.id
         )
+
+
+async def _registrar_aviso_fuera_de_horario(
+    session: AsyncSession,
+    cliente: Cliente,
+    *,
+    instante: datetime | None = None,
+) -> bool:
+    """Conserva la FSM y limita el aviso fuera de horario a uno por hora."""
+    momento = instante or ahora_local()
+    async with bloqueo_por_cliente(session, cliente.id):
+        conversacion = (
+            await session.exec(
+                select(Conversacion).where(Conversacion.cliente_id == cliente.id)
+            )
+        ).first()
+        if conversacion is None:
+            conversacion = Conversacion(cliente_id=cliente.id)
+            session.add(conversacion)
+
+        contexto = conversacion.contexto.copy()
+        ultimo_texto = contexto.get("ultimo_aviso_fuera_horario")
+        if isinstance(ultimo_texto, str):
+            try:
+                ultimo = datetime.fromisoformat(ultimo_texto)
+            except ValueError:
+                ultimo = None
+            if ultimo is not None and ultimo.tzinfo is None:
+                ultimo = ultimo.replace(tzinfo=momento.tzinfo)
+            if (
+                ultimo is not None
+                and momento - ultimo < INTERVALO_AVISO_FUERA_DE_HORARIO
+            ):
+                conversacion.ultima_interaccion = momento.astimezone(timezone.utc)
+                await session.commit()
+                return False
+
+        contexto["ultimo_aviso_fuera_horario"] = momento.isoformat()
+        conversacion.contexto = contexto
+        conversacion.ultima_interaccion = momento.astimezone(timezone.utc)
+        await session.commit()
+        return True
 
 
 async def _registrar_mensaje_entrante(

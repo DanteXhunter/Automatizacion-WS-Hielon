@@ -28,6 +28,10 @@ Enviar un WhatsApp desde uno de los números de prueba registrados hacia el
 número de prueba de Meta. El payload debe aparecer en los logs de uvicorn en
 menos de 2 segundos.
 
+La primera validación se hace con los activos de prueba. No se modifica el
+número comercial ni su aplicación de WhatsApp Business para cerrar este issue.
+La prueba con el número definitivo ocurre después de validar Coexistence.
+
 ## Criterio de aceptación
 
 - [ ] Verificación del webhook exitosa en el panel
