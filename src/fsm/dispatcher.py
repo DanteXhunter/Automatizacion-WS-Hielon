@@ -13,6 +13,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.fsm.states import EstadoConversacion, es_transicion_valida
 from src.models.cliente import Cliente
 from src.models.conversacion import Conversacion
+from src.services.locks import bloqueo_por_cliente
+from src.services.pedido_service import obtener_ultimo_pedido_activo
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +40,7 @@ class ResultadoHandler:
 
 
 HandlerConversacion = Callable[
-    [MensajeEntrante, dict[str, Any], Cliente],
+    [MensajeEntrante, dict[str, Any], Cliente, bool],
     ResultadoHandler,
 ]
 EmisorMensajes = Callable[[Cliente, list[dict[str, Any]]], Awaitable[None]]
@@ -99,35 +101,47 @@ class DispatcherConversacion:
         *,
         enviar_mensajes: EmisorMensajes | None = None,
     ) -> ResultadoHandler | None:
-        """Persiste una transición válida y envía respuestas solo tras el commit.
-
-        TODO(#31): rodear esta operación con un advisory lock por ``cliente.id``.
-        """
-        conversacion = await self._obtener_o_crear_conversacion(session, cliente.id)
-        estado_origen = EstadoConversacion(conversacion.estado_actual)
-        handler = self._handlers.get(estado_origen)
-        if handler is None:
-            await session.rollback()
-            raise HandlerNoRegistradoError(
-                f"No hay handler registrado para el estado {estado_origen.value}."
+        """Serializa por cliente y persiste el estado antes de enviar respuestas."""
+        async with bloqueo_por_cliente(session, cliente.id):
+            conversacion, primera_interaccion = (
+                await self._obtener_o_crear_conversacion(session, cliente.id)
             )
+            estado_origen = EstadoConversacion(conversacion.estado_actual)
+            handler = self._handlers.get(estado_origen)
+            if handler is None:
+                raise HandlerNoRegistradoError(
+                    f"No hay handler registrado para el estado {estado_origen.value}."
+                )
 
-        resultado = handler(mensaje, conversacion.contexto.copy(), cliente)
-        if not es_transicion_valida(estado_origen, resultado.siguiente_estado):
-            logger.warning(
-                "Transición inválida descartada | cliente_id=%s origen=%s destino=%s",
-                cliente.id,
-                estado_origen.value,
-                resultado.siguiente_estado.value,
-            )
-            await session.rollback()
-            return None
+            contexto_handler = conversacion.contexto.copy()
+            if (
+                estado_origen == EstadoConversacion.MENU_PRINCIPAL
+                and mensaje.tipo == "boton"
+                and mensaje.valor == "consultar"
+            ):
+                pedido = await obtener_ultimo_pedido_activo(session, cliente.id)
+                if pedido is not None:
+                    contexto_handler["_pedido_activo"] = {
+                        "numero_orden": pedido.numero_orden,
+                        "estado": pedido.estado.value,
+                    }
 
-        conversacion.estado_anterior = estado_origen.value
-        conversacion.estado_actual = resultado.siguiente_estado.value
-        conversacion.contexto = resultado.contexto
-        conversacion.ultima_interaccion = datetime.now(timezone.utc)
-        await session.commit()
+            resultado = handler(mensaje, contexto_handler, cliente, primera_interaccion)
+            if not es_transicion_valida(estado_origen, resultado.siguiente_estado):
+                logger.warning(
+                    "Transición inválida descartada | cliente_id=%s origen=%s destino=%s",
+                    cliente.id,
+                    estado_origen.value,
+                    resultado.siguiente_estado.value,
+                )
+                await session.rollback()
+                return None
+
+            conversacion.estado_anterior = estado_origen.value
+            conversacion.estado_actual = resultado.siguiente_estado.value
+            conversacion.contexto = resultado.contexto
+            conversacion.ultima_interaccion = datetime.now(timezone.utc)
+            await session.commit()
 
         if enviar_mensajes is not None and resultado.mensajes_salientes:
             await enviar_mensajes(cliente, resultado.mensajes_salientes)
@@ -138,17 +152,17 @@ class DispatcherConversacion:
     async def _obtener_o_crear_conversacion(
         session: AsyncSession,
         cliente_id: UUID,
-    ) -> Conversacion:
+    ) -> tuple[Conversacion, bool]:
         resultado = await session.exec(
             select(Conversacion).where(Conversacion.cliente_id == cliente_id)
         )
         conversacion = resultado.first()
         if conversacion is not None:
-            return conversacion
+            return conversacion, False
 
         conversacion = Conversacion(
             cliente_id=cliente_id,
             estado_actual=EstadoConversacion.IDLE.value,
         )
         session.add(conversacion)
-        return conversacion
+        return conversacion, True

@@ -11,13 +11,15 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import pool
+from sqlalchemy import delete, pool
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.config import settings
 from src.main import app
+from src.models.cliente import Cliente
+from src.models.conversacion import Conversacion
 from src.models.mensaje import Mensaje
 from src.whatsapp.client import WhatsAppClient
 
@@ -48,16 +50,17 @@ def test_webhook_duplicado_guarda_un_solo_mensaje(monkeypatch: pytest.MonkeyPatc
     modulo_database.session_factory = session_factory
     monkeypatch.setitem(sys.modules, "src.database", modulo_database)
 
-    envios: list[tuple[str, str]] = []
+    envios: list[tuple[str, dict]] = []
 
-    async def enviar_texto_falso(
-        _cliente: WhatsAppClient, destinatario: str, texto: str
+    async def enviar_interactivo_falso(
+        _cliente: WhatsAppClient, destinatario: str, interactivo: dict
     ) -> str:
-        envios.append((destinatario, texto))
+        envios.append((destinatario, interactivo))
         return "wamid.echo-prueba"
 
-    monkeypatch.setattr(WhatsAppClient, "enviar_texto", enviar_texto_falso)
+    monkeypatch.setattr(WhatsAppClient, "enviar_interactivo", enviar_interactivo_falso)
 
+    telefono = f"521477{uuid4().int % 10_000_000:07d}"
     whatsapp_message_id = f"wamid.prueba-{uuid4()}"
     payload = {
         "entry": [
@@ -67,14 +70,14 @@ def test_webhook_duplicado_guarda_un_solo_mensaje(monkeypatch: pytest.MonkeyPatc
                         "value": {
                             "contacts": [
                                 {
-                                    "wa_id": "5214771234567",
+                                    "wa_id": telefono,
                                     "profile": {"name": "Cliente de prueba"},
                                 }
                             ],
                             "messages": [
                                 {
                                     "id": whatsapp_message_id,
-                                    "from": "5214771234567",
+                                    "from": telefono,
                                     "type": "text",
                                     "text": {"body": "Hola"},
                                 }
@@ -86,6 +89,33 @@ def test_webhook_duplicado_guarda_un_solo_mensaje(monkeypatch: pytest.MonkeyPatc
         ]
     }
     cuerpo = json.dumps(payload).encode()
+    consulta = {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "messages": [
+                                {
+                                    "id": f"wamid.consulta-{uuid4()}",
+                                    "from": telefono,
+                                    "type": "interactive",
+                                    "interactive": {
+                                        "type": "button_reply",
+                                        "button_reply": {
+                                            "id": "consultar",
+                                            "title": "Consultar pedido",
+                                        },
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+    cuerpo_consulta = json.dumps(consulta).encode()
 
     with TestClient(app) as client:
         primera_respuesta = client.post(
@@ -98,20 +128,52 @@ def test_webhook_duplicado_guarda_un_solo_mensaje(monkeypatch: pytest.MonkeyPatc
             content=cuerpo,
             headers={"X-Hub-Signature-256": _firmar(cuerpo)},
         )
+        respuesta_consulta = client.post(
+            "/webhook/whatsapp",
+            content=cuerpo_consulta,
+            headers={"X-Hub-Signature-256": _firmar(cuerpo_consulta)},
+        )
 
-    async def contar_mensajes() -> int:
+    async def revisar_base() -> tuple[int, str]:
         async with session_factory() as session:
-            resultado = await session.exec(
+            conteo = await session.exec(
                 select(func.count())
                 .select_from(Mensaje)
                 .where(Mensaje.whatsapp_message_id == whatsapp_message_id)
             )
-            return resultado.one()
+            conversacion = await session.exec(
+                select(Conversacion)
+                .join(Cliente)
+                .where(Cliente.telefono == f"+{telefono}")
+            )
+            return conteo.one(), conversacion.one().estado_actual
+
+    async def limpiar_base() -> None:
+        async with session_factory() as session:
+            cliente = (
+                await session.exec(
+                    select(Cliente).where(Cliente.telefono == f"+{telefono}")
+                )
+            ).first()
+            if cliente is None:
+                return
+            await session.exec(delete(Mensaje).where(Mensaje.cliente_id == cliente.id))
+            await session.exec(
+                delete(Conversacion).where(Conversacion.cliente_id == cliente.id)
+            )
+            await session.exec(delete(Cliente).where(Cliente.id == cliente.id))
+            await session.commit()
 
     try:
         assert primera_respuesta.status_code == 200
         assert segunda_respuesta.status_code == 200
-        assert asyncio.run(contar_mensajes()) == 1
-        assert envios == [("5214771234567", "Recibí tu mensaje")]
+        assert respuesta_consulta.status_code == 200
+        assert asyncio.run(revisar_base()) == (1, "MENU_PRINCIPAL")
+        assert len(envios) == 2
+        assert envios[0][0] == telefono
+        assert "Soy el asistente" in envios[0][1]["body"]["text"]
+        assert len(envios[0][1]["action"]["buttons"]) == 3
+        assert "No tienes pedidos activos" in envios[1][1]["body"]["text"]
     finally:
+        asyncio.run(limpiar_base())
         asyncio.run(engine.dispose())

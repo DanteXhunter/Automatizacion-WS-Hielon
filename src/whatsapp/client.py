@@ -73,6 +73,33 @@ class WhatsAppClient:
             "type": "text",
             "text": {"body": texto},
         }
+        return await self._enviar_payload(payload)
+
+    async def enviar_interactivo(
+        self, destinatario: str, interactivo: dict[str, Any]
+    ) -> str:
+        """Envía botones interactivos respetando los límites de Reply Buttons."""
+        botones = interactivo.get("action", {}).get("buttons", [])
+        if interactivo.get("type") != "button" or not 1 <= len(botones) <= 3:
+            raise ValueError("Un menú interactivo requiere entre uno y tres botones.")
+        identificadores = [boton["reply"]["id"] for boton in botones]
+        titulos = [boton["reply"]["title"] for boton in botones]
+        if len(set(identificadores)) != len(identificadores) or any(
+            len(titulo) > 20 for titulo in titulos
+        ):
+            raise ValueError("Los IDs deben ser únicos y los títulos de máximo 20 caracteres.")
+
+        return await self._enviar_payload(
+            {
+                "messaging_product": "whatsapp",
+                "to": destinatario,
+                "type": "interactive",
+                "interactive": interactivo,
+            }
+        )
+
+    async def _enviar_payload(self, payload: dict[str, Any]) -> str:
+        """Comparte manejo de errores y reintentos entre texto y botones."""
 
         for intento in range(1, MAX_INTENTOS + 1):
             try:
