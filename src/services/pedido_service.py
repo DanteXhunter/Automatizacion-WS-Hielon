@@ -69,6 +69,19 @@ async def obtener_o_crear_borrador(
     return pedido
 
 
+async def obtener_borrador(
+    session: AsyncSession, cliente_id: UUID, borrador_id: UUID | None
+) -> Pedido | None:
+    """Obtiene el borrador de la conversación sin crear uno implícitamente."""
+    consulta = select(Pedido).where(
+        Pedido.cliente_id == cliente_id,
+        Pedido.estado == EstadoPedido.BORRADOR,
+    )
+    if borrador_id is not None:
+        consulta = consulta.where(Pedido.id == borrador_id)
+    return (await session.exec(consulta)).first()
+
+
 async def agregar_item_borrador(
     session: AsyncSession,
     pedido: Pedido,
@@ -129,6 +142,17 @@ async def eliminar_item_borrador(
     await session.flush()
     pedido.total = await calcular_total_borrador(session, pedido.id)
     return True
+
+
+async def vaciar_items_borrador(session: AsyncSession, pedido: Pedido) -> None:
+    """Elimina todas las líneas del borrador y deja su total consistente en cero."""
+    resultado = await session.exec(
+        select(PedidoItem).where(PedidoItem.pedido_id == pedido.id)
+    )
+    for item in resultado.all():
+        await session.delete(item)
+    await session.flush()
+    pedido.total = await calcular_total_borrador(session, pedido.id)
 
 
 async def obtener_ultimo_pedido_activo(

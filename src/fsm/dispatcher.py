@@ -147,8 +147,13 @@ class DispatcherConversacion:
             conversacion.estado_anterior = estado_origen.value
             conversacion.estado_actual = resultado.siguiente_estado.value
             conversacion.contexto = resultado.contexto
+            limpiar_borrador = bool(
+                conversacion.contexto.pop("_limpiar_pedido_borrador", False)
+            )
             borrador_id = resultado.contexto.get("pedido_borrador_id")
-            if isinstance(borrador_id, str):
+            if limpiar_borrador:
+                conversacion.pedido_borrador_id = None
+            elif isinstance(borrador_id, str):
                 try:
                     conversacion.pedido_borrador_id = UUID(borrador_id)
                 except ValueError:

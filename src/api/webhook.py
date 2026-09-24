@@ -7,12 +7,18 @@ from fastapi.responses import PlainTextResponse
 
 from src.config import settings
 from src.fsm.dispatcher import DispatcherConversacion, normalizar_mensaje
+from src.fsm.handlers.direccion import atender_captura_direccion
 from src.fsm.handlers.idle import atender_idle
 from src.fsm.handlers.menu_principal import atender_asesor, atender_menu_principal
 from src.fsm.handlers.pedido import (
     atender_captura_cantidad,
     atender_carrito,
     atender_seleccion_producto,
+)
+from src.fsm.handlers.pedido_finalizacion import (
+    atender_confirmacion_cancelacion,
+    atender_revision_resumen,
+    atender_seleccion_modificacion,
 )
 from src.fsm.states import EstadoConversacion
 from src.models.cliente import Cliente
@@ -32,6 +38,10 @@ dispatcher = DispatcherConversacion(
         EstadoConversacion.SELECCIONANDO_PRODUCTO: atender_seleccion_producto,
         EstadoConversacion.CAPTURANDO_CANTIDAD: atender_captura_cantidad,
         EstadoConversacion.AGREGAR_MAS_O_CONTINUAR: atender_carrito,
+        EstadoConversacion.CAPTURANDO_DIRECCION: atender_captura_direccion,
+        EstadoConversacion.REVISANDO_RESUMEN: atender_revision_resumen,
+        EstadoConversacion.SELECCIONANDO_MODIFICACION: atender_seleccion_modificacion,
+        EstadoConversacion.CONFIRMANDO_CANCELACION: atender_confirmacion_cancelacion,
     }
 )
 

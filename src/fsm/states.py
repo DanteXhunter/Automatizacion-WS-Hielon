@@ -82,6 +82,7 @@ TRANSICIONES_VALIDAS: dict[EstadoConversacion, frozenset[EstadoConversacion]] = 
             EstadoConversacion.CAPTURANDO_DIRECCION,
             EstadoConversacion.REVISANDO_RESUMEN,
             EstadoConversacion.CONFIRMANDO_CANCELACION,
+            EstadoConversacion.EN_ASESOR_HUMANO,
         }
     ),
     EstadoConversacion.CONFIRMANDO_CANCELACION: frozenset(

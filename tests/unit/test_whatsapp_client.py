@@ -171,3 +171,51 @@ async def test_envia_reply_buttons_con_ids_estables():
         await cliente.aclose()
 
     assert message_id == "wamid.botones"
+
+
+@pytest.mark.asyncio
+async def test_envia_list_message_con_las_opciones_del_resumen():
+    async def responder(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload["interactive"]["type"] == "list"
+        assert [
+            fila["id"]
+            for fila in payload["interactive"]["action"]["sections"][0]["rows"]
+        ] == ["confirmar", "modificar", "cancelar", "asesor"]
+        return httpx.Response(200, json={"messages": [{"id": "wamid.resumen"}]})
+
+    cliente = WhatsAppClient(
+        TOKEN_PRUEBA,
+        PHONE_NUMBER_ID_PRUEBA,
+        transport=httpx.MockTransport(responder),
+        sleeper=no_esperar,
+    )
+    try:
+        message_id = await cliente.enviar_interactivo(
+            "5214771234567",
+            {
+                "type": "list",
+                "body": {"text": "Resumen"},
+                "action": {
+                    "button": "Ver opciones",
+                    "sections": [
+                        {
+                            "title": "¿Qué deseas hacer?",
+                            "rows": [
+                                {"id": identificador, "title": titulo}
+                                for identificador, titulo in (
+                                    ("confirmar", "Confirmar pedido"),
+                                    ("modificar", "Modificar pedido"),
+                                    ("cancelar", "Cancelar pedido"),
+                                    ("asesor", "Hablar con asesor"),
+                                )
+                            ],
+                        }
+                    ],
+                },
+            },
+        )
+    finally:
+        await cliente.aclose()
+
+    assert message_id == "wamid.resumen"
