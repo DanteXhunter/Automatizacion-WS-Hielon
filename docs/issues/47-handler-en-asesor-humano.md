@@ -4,7 +4,8 @@
 
 ## Objetivo
 
-Silenciar al bot cuando un humano toma la conversación.
+Silenciar al bot únicamente en la conversación que tomó un humano, sin afectar
+la atención automática de otros clientes.
 
 ## Comportamiento
 
@@ -14,6 +15,10 @@ En `EN_ASESOR_HUMANO`:
    lo que sea)
 2. El bot **no genera ninguna respuesta automática**
 3. La conversación no avanza de estado por sí sola
+
+El estado pertenece a la conversación del cliente. No existe una bandera global
+que apague el bot completo: si el cliente A está en `EN_ASESOR_HUMANO`, un
+mensaje del cliente B debe seguir su propia FSM y recibir respuesta normalmente.
 
 Es el único estado donde llegar aquí no dispara un mensaje saliente
 inmediato. El dispatcher debe reconocerlo como caso especial: procesa el
@@ -45,3 +50,5 @@ de entrada (#50) y de salida (#49) son issues aparte y **no bloquean este**.
 - [ ] Los mensajes entrantes se siguen guardando con su idempotencia normal
 - [ ] El estado no cambia solo por el paso del tiempo
 - [ ] Test que confirme cero llamadas al cliente de WhatsApp en este estado
+- [ ] Test con dos clientes simultáneos: uno permanece silenciado en handoff y
+      el otro recibe la respuesta automática correspondiente a su estado

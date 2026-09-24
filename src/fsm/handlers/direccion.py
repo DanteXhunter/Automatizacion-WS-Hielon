@@ -66,13 +66,6 @@ async def atender_captura_direccion(
     pedido_borrador_id: UUID | None,
 ) -> ResultadoHandler:
     """Guarda y asocia una dirección o reutiliza la última del cliente."""
-    if mensaje.tipo == "boton" and mensaje.valor == "volver":
-        return ResultadoHandler(
-            EstadoConversacion.AGREGAR_MAS_O_CONTINUAR,
-            contexto,
-            [{"type": "text", "body": "Regresamos a tu carrito."}],
-        )
-
     if mensaje.tipo == "boton" and mensaje.valor == "usar_esta":
         direccion = await obtener_ultima_direccion(session, cliente.id)
         if direccion is not None:

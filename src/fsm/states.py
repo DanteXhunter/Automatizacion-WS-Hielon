@@ -22,7 +22,9 @@ class EstadoConversacion(str, Enum):
 # Los bucles al mismo estado son válidos: representan un dato inválido que se
 # vuelve a pedir sin perder el punto actual de la conversación.
 TRANSICIONES_VALIDAS: dict[EstadoConversacion, frozenset[EstadoConversacion]] = {
-    EstadoConversacion.IDLE: frozenset({EstadoConversacion.MENU_PRINCIPAL}),
+    EstadoConversacion.IDLE: frozenset(
+        {EstadoConversacion.IDLE, EstadoConversacion.MENU_PRINCIPAL}
+    ),
     EstadoConversacion.MENU_PRINCIPAL: frozenset(
         {
             EstadoConversacion.MENU_PRINCIPAL,

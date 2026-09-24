@@ -39,3 +39,7 @@ numérico interno de Meta. Es el que va en la URL de la API:
 
 Con esto ya se puede desarrollar todo, sin esperar la verificación del negocio
 (issue #2) ni el número dedicado (issue #3). Es el desbloqueo de la Fase 1.
+
+Este issue usa exclusivamente el número de prueba de Meta. No autoriza registrar
+ni migrar el número comercial de Hielon. El alta definitiva se realiza en el
+issue #3 únicamente después de comprobar que Coexistence está disponible.

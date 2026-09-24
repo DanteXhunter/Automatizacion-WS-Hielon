@@ -1,20 +1,34 @@
-## Idea de backlog
+## Decisión de alcance actualizada
 
-Interfaz web con chat en vivo (WebSockets o Server-Sent Events) para que un
-humano pueda responder directamente desde el mismo número del bot.
+El proyecto tendrá un **panel web sencillo**, pero se desarrollará al final,
+después de completar pedidos, persistencia, consulta de conversaciones y
+handoff. My Business POS 2011 continuará como sistema administrativo y punto de
+venta; este panel no implementará caja, inventario ni facturación.
 
 ## Por qué resuelve un problema real
 
-Es la respuesta de largo plazo a la limitación central del proyecto: al
-registrar el número en Cloud API se pierde el acceso desde la app móvil de
-WhatsApp Business (ver issue #3). En v1 el handoff se resuelve con una
-notificación al WhatsApp personal de Gabriel, pero un humano no puede "tomar"
-la conversación desde ahí;
-solo se entera y decide qué hacer por fuera. Un panel con chat en vivo
-cerraría ese ciclo completo dentro del mismo sistema.
+Con Coexistence, Gabriel atiende manualmente desde WhatsApp Business. El panel
+complementa esa operación mostrando pedidos, conversaciones, historial y el
+estado del handoff. Si Coexistence no resulta elegible, el alcance deberá
+ampliarse para permitir respuestas manuales mediante Cloud API.
 
-## Por qué no en v1
+## Alcance del panel sencillo
 
-`claude.md` es explícito: sin panel admin React en v1, visualización vía
-Swagger y DBeaver. Es la pieza de mayor esfuerzo del backlog completo; se
-reconsidera cuando el volumen de handoffs justifique la inversión.
+- Lista y detalle de pedidos.
+- Lista y detalle de conversaciones.
+- Historial de mensajes.
+- Identificación y cierre de handoffs.
+- Consumo de endpoints administrativos previamente probados desde Swagger.
+- Enlace claro entre el folio del bot y la captura manual en My Business POS
+  2011, sin duplicar funciones de caja, inventario o facturación.
+
+Un inbox multiusuario en tiempo real con asignación de agentes, notas internas
+y WebSockets/SSE sigue siendo una evolución posterior.
+
+## Criterio de aceptación
+
+- [ ] La secretaria puede localizar pedidos pendientes y abrir su detalle
+- [ ] Se puede consultar el historial completo de una conversación
+- [ ] Las conversaciones en handoff se distinguen y pueden cerrarse
+- [ ] Cerrar un handoff devuelve al bot solo esa conversación
+- [ ] El panel no implementa caja, inventario, facturación ni impresión fiscal

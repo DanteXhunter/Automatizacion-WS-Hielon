@@ -37,21 +37,27 @@ def crear_menu(texto: str = "¿En qué te ayudo?") -> dict[str, Any]:
 
 
 def crear_selector_productos(productos: list[Producto]) -> dict[str, Any]:
-    """Construye Reply Buttons con UUIDs de catálogo, nunca nombres codificados."""
-    # Meta limita los Reply Buttons a tres; si el catálogo supera ese número,
-    # migrar este selector a List Message (no ampliar el arreglo de botones).
+    """Construye una lista de productos con UUIDs y navegación de regreso."""
     return {
         "type": "interactive",
         "interactive": {
-            "type": "button",
+            "type": "list",
             "body": {"text": "¿Qué presentación de hielo necesitas?"},
             "action": {
-                "buttons": _botones(
-                    tuple(
-                        (str(producto.id), producto.nombre[:20])
-                        for producto in productos[:3]
-                    )
-                )
+                "button": "Ver presentaciones",
+                "sections": [
+                    {
+                        "title": "Productos",
+                        "rows": [
+                            {
+                                "id": str(producto.id),
+                                "title": producto.nombre[:24],
+                            }
+                            for producto in productos[:9]
+                        ]
+                        + [{"id": "volver", "title": "Volver"}],
+                    }
+                ],
             },
         },
     }

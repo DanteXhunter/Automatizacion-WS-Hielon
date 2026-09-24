@@ -8,14 +8,13 @@ from uuid import UUID
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.fsm.dispatcher import MensajeEntrante, ResultadoHandler
-from src.fsm.handlers.menu_principal import crear_menu, crear_selector_productos
+from src.fsm.handlers.menu_principal import crear_selector_productos
 from src.fsm.states import EstadoConversacion
 from src.models.cliente import Cliente
 from src.models.producto import Producto
 from src.services.pedido_service import (
     agregar_item_borrador,
     calcular_total_borrador,
-    eliminar_item_borrador,
     listar_items_borrador,
     listar_productos_activos,
     obtener_o_crear_borrador,
@@ -26,7 +25,9 @@ CANTIDAD_MAXIMA = 500
 BOTON_VOLVER = ("volver", "Volver")
 
 
-def _preguntar_cantidad(producto: Producto, texto: str | None = None) -> dict[str, Any]:
+def crear_pregunta_cantidad(
+    producto: Producto, texto: str | None = None
+) -> dict[str, Any]:
     return {
         "type": "interactive",
         "interactive": {
@@ -43,7 +44,7 @@ def _preguntar_cantidad(producto: Producto, texto: str | None = None) -> dict[st
     }
 
 
-def _preguntar_accion_carrito(
+def crear_mensaje_carrito(
     items: list[tuple[Any, Producto]], total: Decimal
 ) -> dict[str, Any]:
     lineas = ["Tu pedido va así:"]
@@ -86,14 +87,6 @@ async def atender_seleccion_producto(
     session: AsyncSession,
 ) -> ResultadoHandler:
     """Valida UUID y disponibilidad antes de almacenar el producto elegido."""
-    if mensaje.tipo == "boton" and mensaje.valor == "volver":
-        contexto.pop("producto_actual", None)
-        return ResultadoHandler(
-            EstadoConversacion.MENU_PRINCIPAL,
-            contexto,
-            [crear_menu()],
-        )
-
     producto_id: UUID | None = None
     if mensaje.tipo == "boton" and mensaje.valor:
         try:
@@ -111,7 +104,7 @@ async def atender_seleccion_producto(
         return ResultadoHandler(
             EstadoConversacion.CAPTURANDO_CANTIDAD,
             contexto,
-            [_preguntar_cantidad(producto)],
+            [crear_pregunta_cantidad(producto)],
         )
 
     productos = await listar_productos_activos(session)
@@ -149,26 +142,6 @@ async def atender_captura_cantidad(
     pedido_borrador_id: UUID | None,
 ) -> ResultadoHandler:
     """Acepta solo enteros positivos acotados y persiste el renglón del pedido."""
-    if mensaje.tipo == "boton" and mensaje.valor == "volver":
-        contexto.pop("producto_actual", None)
-        productos = await listar_productos_activos(session)
-        if not productos:
-            return ResultadoHandler(
-                EstadoConversacion.EN_ASESOR_HUMANO,
-                contexto,
-                [
-                    {
-                        "type": "text",
-                        "body": "No hay productos disponibles. Te comunico con un asesor.",
-                    }
-                ],
-            )
-        return ResultadoHandler(
-            EstadoConversacion.SELECCIONANDO_PRODUCTO,
-            contexto,
-            [crear_selector_productos(productos)],
-        )
-
     producto_id = _uuid_desde_contexto(contexto.get("producto_actual"))
     producto = (
         await obtener_producto_activo(session, producto_id)
@@ -206,7 +179,7 @@ async def atender_captura_cantidad(
             EstadoConversacion.CAPTURANDO_CANTIDAD,
             contexto,
             [
-                _preguntar_cantidad(
+                crear_pregunta_cantidad(
                     producto,
                     f"Necesito el número de bolsas (1–{CANTIDAD_MAXIMA}) para "
                     f"{producto.nombre}. Por ejemplo: 10",
@@ -225,7 +198,7 @@ async def atender_captura_cantidad(
     return ResultadoHandler(
         EstadoConversacion.AGREGAR_MAS_O_CONTINUAR,
         contexto,
-        [_preguntar_accion_carrito(items, total)],
+        [crear_mensaje_carrito(items, total)],
     )
 
 
@@ -268,29 +241,12 @@ async def atender_carrito(
             [crear_selector_productos(productos)],
         )
 
-    if mensaje.tipo == "boton" and mensaje.valor == "volver":
-        ultimo_item_id = _uuid_desde_contexto(contexto.get("ultimo_item_id"))
-        ultimo = next(
-            ((item, producto) for item, producto in items if item.id == ultimo_item_id),
-            None,
-        )
-        if ultimo is not None:
-            item, producto = ultimo
-            await eliminar_item_borrador(session, pedido, item.id)
-            contexto["producto_actual"] = str(producto.id)
-            contexto.pop("ultimo_item_id", None)
-            return ResultadoHandler(
-                EstadoConversacion.CAPTURANDO_CANTIDAD,
-                contexto,
-                [_preguntar_cantidad(producto)],
-            )
-
     total = await calcular_total_borrador(session, pedido.id)
     return ResultadoHandler(
         EstadoConversacion.AGREGAR_MAS_O_CONTINUAR,
         contexto,
         (
-            [_preguntar_accion_carrito(items, total)]
+            [crear_mensaje_carrito(items, total)]
             if items
             else [
                 {

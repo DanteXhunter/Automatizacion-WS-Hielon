@@ -58,7 +58,15 @@ Automatizar el chat de WhatsApp del negocio para:
 2. Enviar recordatorios matutinos proactivos preguntando si el cliente necesita hielo hoy.
 3. Rutear a un humano cuando el caso lo requiera (negociación, regateo, casos raros).
 
-Los datos capturados por el bot alimentarán en el futuro el ERP interno (fuera del alcance de este proyecto).
+Hielon utiliza **My Business POS 2011** como sistema administrativo y punto de
+venta. Este proyecto no lo reemplaza. Una posible integración futura se define
+solo después de investigar qué mecanismos reales de intercambio ofrece esa
+versión; no se presupone que tenga una API moderna.
+
+En el MVP, la secretaria consulta cada pedido confirmado por el bot, lo captura
+manualmente en My Business POS 2011 y usa el propio POS para imprimir el ticket.
+Automatizar ese paso es una evolución posterior y no debe bloquear la entrega
+del flujo de pedidos.
 
 ---
 
@@ -72,13 +80,23 @@ Los datos capturados por el bot alimentarán en el futuro el ERP interno (fuera 
 - Persistencia en PostgreSQL de clientes, pedidos, conversaciones y mensajes.
 - Envío de mensajes salientes vía Meta Cloud API.
 - Notificación a un humano (WhatsApp) cuando el bot debe callarse.
+- Endpoints administrativos para consultar pedidos, conversaciones e historial,
+  y para controlar el handoff antes de que exista una interfaz gráfica.
 
 **Fuera del alcance — proyectos separados que consumirán esta base de datos:**
-- **ERP / panel administrativo con frontend.** Ver mensajes en tiempo real, chat en vivo del asesor humano, autenticación de usuarios internos, roles y permisos, catálogo, inventario, rutas de reparto. Es un segundo proyecto con su propio repo. Este backend debe dejarlo *posible* (datos bien modelados, endpoints admin limpios), no *implementarlo*.
-- **Integración con el ERP existente del grupo**, si lo hay.
+- **Reemplazar My Business POS 2011.** Inventario, caja, facturación y demás
+  operación administrativa continúan en ese sistema.
+- **Panel empresarial completo.** Autenticación multiusuario, roles, permisos,
+  catálogo, inventario y rutas de reparto no forman parte del panel sencillo.
+- **Integración con My Business POS 2011.** Se evalúa después del núcleo del bot
+  y del panel mínimo, cuando se conozcan sus capacidades técnicas reales.
 - **Multi-tenancy real** para Cerpomex y Fruvec. Se contempla en el modelo de datos, no se implementa en v1.
 
-**Por qué importa la separación**: el handoff a humano en v1 se resuelve por una notificación de WhatsApp a Gabriel precisamente porque el panel de chat en vivo es otro proyecto. Si se mezclan, ninguno de los dos se termina. La regla es: **este backend termina donde empieza la interfaz humana**.
+**Orden de prioridad decidido (24-sep-2026):** primero se completa el pedido,
+su persistencia, la consulta de conversaciones y el handoff. Después se
+desarrolla un panel web sencillo para visualizar pedidos, historial y control
+del handoff. El panel no es el punto de venta y se construye al final para no
+retrasar el núcleo operativo.
 
 **Objetivo de negocio**, además del ahorro operativo: es una pieza de credibilidad comercial. Gabriel la muestra en juntas con restaurantes y hoteles como prueba de que Hielon es una operación seria y lista para atender volumen. Eso implica que el bot debe verse pulido y no fallar en la demo, aunque el volumen real todavía sea bajo.
 
@@ -86,17 +104,26 @@ Los datos capturados por el bot alimentarán en el futuro el ERP interno (fuera 
 
 ## Estado actual y riesgos (6-ago-2026)
 
-**Actualización técnica (24-sep-2026):** el webhook ya registra mensajes entrantes de forma idempotente y conecta la FSM para `IDLE`, `MENU_PRINCIPAL` y `EN_ASESOR_HUMANO`. El saludo y menú salen en un solo mensaje interactivo; el primer contacto se detecta por ausencia de conversación previa, no por `cliente.nombre`, porque Meta puede entregar un nombre de perfil desde el primer webhook. El dispatcher usa un advisory lock transaccional por cliente antes de leer su estado. Existe la lógica de horario en `src/utils/datetime.py`, pero aún no se aplica como filtro al webhook. `paso_hora_corte` devuelve verdadero después de las 14:00, no exactamente a las 14:00. La opción de producto muestra botones provisionales hasta que el catálogo activo se conecte a la FSM. El handoff todavía no envía la notificación al asesor. No se ha validado el envío en un teléfono real.
+**Actualización técnica (24-sep-2026):** el flujo llega hasta captura de
+dirección, resumen, modificación y cancelación. La confirmación definitiva del
+pedido, el folio, la consulta administrativa de conversaciones y el handoff
+operativo todavía están pendientes. El acceso a la organización de Meta y al
+teléfono ya está disponible; queda verificar la elegibilidad de Coexistence y
+hacer la prueba con un número real sin migrarlo prematuramente.
 
 **Fecha objetivo de entrega**: finales de agosto a mediados de octubre de 2026 (~10 semanas). Cuadra con el roadmap completo, incluyendo n8n y dashboard de costos.
 
 **Estado por fase:**
-- **Fase 0 — BLOQUEADA.** La cuenta de Meta Business existe pero **fue baneada por razones desconocidas**. Ticket de apelación levantado; respuesta esperada ~7-ago-2026.
-- **Fase 1 — desbloqueada y en curso.** El webhook, la validación HMAC, la config y los tests se desarrollan sin cuenta de Meta. Solo la prueba end-to-end con un mensaje real requiere la cuenta viva.
+- **Fase 0 — desbloqueada.** Ya existe acceso a la organización de Meta y al
+  teléfono. Falta auditar los activos y comprobar Coexistence.
+- **Fases 1 y 2 — completadas en código.** Webhook, seguridad, persistencia y
+  base de la FSM están implementados.
+- **Fase 3 — en curso.** Falta confirmar el pedido de forma transaccional y
+  completar las reglas finales del flujo.
 
-**Riesgo #1 del proyecto: el baneo.** Las apelaciones de Meta Business a veces no se revierten y pueden tardar mucho más de lo prometido. Si no se recupera, el plan B es abrir cuenta con otro administrador o bajo otra razón social del grupo (Cerpomex, Fruvec). No dejar que este bloqueo detenga el desarrollo del backend.
-
-**Ya resuelto**: número dedicado adquirido; Gabriel sabe y aceptó que ese número pierde la app móvil de WhatsApp.
+**Riesgo operativo principal:** registrar el número por el flujo equivocado y
+perder innecesariamente la aplicación móvil. No completar el alta definitiva
+hasta confirmar que la cuenta y el número admiten Coexistence.
 
 **Pendiente de dato**: precio de lista de las bolsas de 3, 5 y 10 kg. Se necesita para calcular qué porcentaje del ticket representan los MX$1.10 de mensajería y decidir cuánto vale la pena optimizar (ver "Presupuesto de mensajes").
 
@@ -189,9 +216,21 @@ Bajo el modelo anterior esto costaba casi nada. Bajo el nuevo, es un gasto opera
 
 **Regla de revisión**: cada issue de la Fase 3 que agregue un mensaje saliente al flujo debe declarar en su descripción el delta de MSPC y por qué se justifica.
 
-### 3. Un número no puede estar en Cloud API y en la app WhatsApp Business a la vez
+### 3. Coexistence para Cloud API y WhatsApp Business
 
-Al registrar el número en Cloud API, se pierde el acceso desde la app móvil. Si Gabriel o un vendedor quiere responder desde ese mismo número, debe ser desde el panel que se construya. En v1 el handoff a humano se resuelve notificando al WhatsApp personal de Gabriel (ver sección de handoff).
+La operación objetivo utiliza **Coexistence** para mantener el número de Hielon
+en WhatsApp Business y conectarlo simultáneamente a Cloud API. Así, el bot
+atiende el flujo estándar y Gabriel responde desde la aplicación cuando existe
+un handoff.
+
+El silencio del bot es **por conversación**: únicamente deja de responder al
+cliente que está en `EN_ASESOR_HUMANO`. Las conversaciones de los demás
+clientes conservan su propio estado y continúan siendo atendidas por el bot.
+
+No todos los números ni todos los flujos de alta son elegibles. Un registro
+estándar de Cloud API puede retirar el número de la aplicación. Por eso se debe
+verificar la elegibilidad y seleccionar explícitamente el onboarding de
+Coexistence antes de migrar o registrar el número definitivo.
 
 ### 4. LFPDPPP (Ley Federal de Protección de Datos Personales, México) y opt-in
 
@@ -238,7 +277,11 @@ Meta puede reintentar entregar el mismo webhook. Cada mensaje trae un `message_i
 
 **Sin Redis en v1.** El estado de conversación vive en Postgres. Si el volumen crece se puede migrar a Redis después.
 
-**Sin panel admin React en v1.** La visualización se hace vía Swagger (`/docs` de FastAPI) y acceso directo a Postgres con DBeaver o similar.
+**Panel web sencillo al final.** Antes del panel, los endpoints administrativos
+se prueban y utilizan desde Swagger. El panel final solo mostrará pedidos,
+conversaciones, historial y control del handoff; My Business POS 2011 sigue
+siendo el sistema administrativo. Un panel React completo y multiusuario queda
+fuera de v1.
 
 ---
 
@@ -479,8 +522,12 @@ Reply Buttons:
 - `No, regresar` → `REVISANDO_RESUMEN`.
 
 #### `EN_ASESOR_HUMANO`
-- El bot **no responde** mientras esté en este estado.
+- El bot **no responde a ese cliente** mientras su conversación esté en este
+  estado. No existe un apagado global: el resto de los clientes continúa siendo
+  atendido con normalidad.
 - Todos los mensajes entrantes se guardan en `mensajes`.
+- Con Coexistence, Gabriel abre la conversación y responde desde WhatsApp
+  Business usando el mismo número de Hielon.
 - Se dispara notificación al **WhatsApp personal de Gabriel** con: número del cliente, últimos mensajes, motivo (regateo, escape hatch, etc.). Como Gabriel nunca le escribe al bot, nunca hay ventana de 24h abierta con él: la notificación **debe ser plantilla `utility` aprobada** (`handoff_asesor`). Costo MX$0.1565 por handoff, despreciable.
 - **Decisión revisada (6-ago-2026)**: originalmente era Telegram; se cambió a WhatsApp porque Gabriel no usa Telegram. Una notificación que llega a una app que el destinatario no abre no sirve de nada.
 - Al cerrar el chat manualmente (endpoint admin), el estado vuelve a `IDLE`.
@@ -694,10 +741,16 @@ Cada fase se convierte en un **milestone**; cada bullet, en un **issue**.
 - [ ] Mensaje "sugerimos programar para mañana" después de las 14:00
 
 ### Fase 4 — Handoff humano (semana 7)
-- [ ] Handler `EN_ASESOR_HUMANO` (bot silenciado)
+- [ ] Handler `EN_ASESOR_HUMANO` (bot silenciado solo para esa conversación)
 - [ ] Registrar plantilla `handoff_asesor` (utility) y notificar al WhatsApp de Gabriel
 - [ ] Endpoint admin `POST /admin/conversaciones/{id}/cerrar-handoff`
 - [ ] Botón "Hablar con asesor" en `MENU_PRINCIPAL` y `REVISANDO_RESUMEN`
+- [ ] Endpoint para listar conversaciones y filtrar las que esperan asesor
+- [ ] Endpoint para consultar el historial completo de una conversación
+- [ ] Registrar también los mensajes salientes y los mensajes manuales que
+      Coexistence entregue al webhook
+- [ ] Verificar que Gabriel pueda responder desde WhatsApp Business y que el
+      bot permanezca silenciado solo en ese handoff, sin afectar a otros clientes
 
 ### Fase 5 — Despliegue a producción (semana 8)
 - [ ] Crear proyecto en Railway y conectar el repo de GitHub
@@ -742,15 +795,33 @@ Cada fase se convierte en un **milestone**; cada bullet, en un **issue**.
 - [ ] #89 — Vista HTML mínima: total por categoría, costo acumulado, proyección contra el umbral
 - [ ] #90 — Alerta al WhatsApp de Gabriel si el gasto mensual estimado supera el umbral configurable
 
+### Fase 7 — Panel web sencillo (al final del núcleo)
+
+- [ ] Consultar pedidos y su estado
+- [ ] Consultar conversaciones e historial de mensajes
+- [ ] Identificar conversaciones en handoff
+- [ ] Cerrar el handoff y devolver el control al bot
+- [ ] Consumir los endpoints administrativos ya probados en Swagger
+- [ ] Mantener explícitamente fuera del panel: caja, inventario, facturación y
+      funciones cubiertas por My Business POS 2011
+
+### Operación inicial con My Business POS 2011
+
+- [ ] La secretaria consulta los pedidos confirmados en la API o el panel
+- [ ] Captura manualmente la venta en My Business POS 2011
+- [ ] Imprime el ticket desde My Business POS 2011
+- [ ] Evaluar automatización solo después de documentar la instalación real,
+      el esquema de productos y una interfaz de integración soportada
+
 ### Backlog nice-to-have (sin sprint, futuro)
 - Pedido mínimo (20 bolsas)
 - Programar pedido para mañana
 - Detección de zona fuera de alcance por geocercas
-- Panel admin React con chat en vivo (WebSockets/SSE)
+- Panel multiusuario avanzado con chat en vivo (WebSockets/SSE)
 - Silenciamiento por insistencia fuera de horario
 - Escape hatch global "hablar con asesor" desde cualquier estado
 - Modificación de items individuales dentro del carrito
-- Integración con ERP
+- Integración con My Business POS 2011, sujeta a investigación técnica
 - LLM para clasificar intención y normalizar direcciones
 - Multi-tenancy para Cerpomex y Fruvec
 

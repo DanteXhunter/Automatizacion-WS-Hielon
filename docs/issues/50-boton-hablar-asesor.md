@@ -30,6 +30,9 @@ automatizado (en el menú).
 Te comunico con un asesor, en un momento te atienden.
 ```
 
+La transición se guarda en la conversación de ese cliente. El bot no se apaga
+globalmente y continúa atendiendo a cualquier otro número.
+
 ## Diferencia con el escalamiento automático
 
 Este es voluntario (el cliente lo pide); el del issue #30 es automático (tres
@@ -48,3 +51,4 @@ el asesor humano decida con el cliente si continúa o se ajusta.
 - [ ] Dispara notificación con el motivo correcto en cada caso
 - [ ] El borrador de `REVISANDO_RESUMEN` no se toca al escalar
 - [ ] El cliente recibe confirmación de que será atendido por un humano
+- [ ] Otro cliente puede continuar su flujo automático durante el handoff

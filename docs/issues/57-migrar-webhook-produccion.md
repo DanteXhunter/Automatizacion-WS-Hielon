@@ -1,6 +1,7 @@
 ## Depende de
 
 - #17 — webhook ya funcionando (aquí solo cambia la URL)
+- #3 — Coexistence validado para el número comercial
 - #55 — servicio corriendo en Railway
 - #56 — subdominio HTTPS generado
 
@@ -20,12 +21,14 @@ webhook.
 ## Prueba de extremo a extremo
 
 Enviar un mensaje real desde un celular hacia el número de producción (si ya
-se completó la Fase 0 con el número dedicado) o hacia el número de prueba, y
+se completó la Fase 0 con Coexistence) o hacia el número de prueba, y
 confirmar que:
 
 - Llega al backend en Railway
 - Se guarda en Postgres de producción
 - La respuesta del bot llega al celular
+- La conversación sigue visible en WhatsApp Business
+- Un handoff silencia solo ese chat y permite responder desde la aplicación
 
 ## Qué hacer con ngrok después de esto
 
@@ -39,4 +42,6 @@ servicio real".
 - [ ] Callback URL apuntando al dominio de producción
 - [ ] Verificación exitosa contra el nuevo endpoint
 - [ ] Mensaje real completa el ciclo completo en producción
+- [ ] WhatsApp Business conserva acceso al número mediante Coexistence
+- [ ] Dos conversaciones simultáneas confirman que el handoff es aislado
 - [ ] ngrok deja de ser necesario para que el sistema funcione
