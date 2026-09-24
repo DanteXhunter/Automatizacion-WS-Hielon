@@ -184,3 +184,31 @@ def test_dispatcher_crea_conversacion_idle_si_el_cliente_no_tenia_una():
 
     assert len(sesion.agregados) == 1
     assert sesion.agregados[0].cliente_id == cliente.id
+
+
+def test_dispatcher_limpia_el_puntero_del_borrador_al_cancelar():
+    cliente = _cliente()
+    borrador_id = cliente.id
+    conversacion = Conversacion(
+        cliente_id=cliente.id,
+        estado_actual=EstadoConversacion.CONFIRMANDO_CANCELACION.value,
+        pedido_borrador_id=borrador_id,
+    )
+    sesion = SesionFalsa(conversacion)
+
+    def handler(_mensaje, _contexto, _cliente, _primera_interaccion):
+        return ResultadoHandler(
+            siguiente_estado=EstadoConversacion.IDLE,
+            contexto={"_limpiar_pedido_borrador": True},
+            mensajes_salientes=[],
+        )
+
+    asyncio.run(
+        DispatcherConversacion(
+            {EstadoConversacion.CONFIRMANDO_CANCELACION: handler}
+        ).procesar(sesion, cliente, _mensaje())
+    )
+
+    assert conversacion.estado_actual == EstadoConversacion.IDLE.value
+    assert conversacion.pedido_borrador_id is None
+    assert conversacion.contexto == {}

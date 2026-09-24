@@ -28,6 +28,10 @@ def test_transiciones_principales_del_pedido_son_validas():
         EstadoConversacion.REVISANDO_RESUMEN,
         EstadoConversacion.EN_ASESOR_HUMANO,
     )
+    assert es_transicion_valida(
+        EstadoConversacion.SELECCIONANDO_MODIFICACION,
+        EstadoConversacion.EN_ASESOR_HUMANO,
+    )
 
 
 def test_transicion_que_salta_pasos_es_invalida():

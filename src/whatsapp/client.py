@@ -78,16 +78,36 @@ class WhatsAppClient:
     async def enviar_interactivo(
         self, destinatario: str, interactivo: dict[str, Any]
     ) -> str:
-        """Envía botones interactivos respetando los límites de Reply Buttons."""
-        botones = interactivo.get("action", {}).get("buttons", [])
-        if interactivo.get("type") != "button" or not 1 <= len(botones) <= 3:
-            raise ValueError("Un menú interactivo requiere entre uno y tres botones.")
-        identificadores = [boton["reply"]["id"] for boton in botones]
-        titulos = [boton["reply"]["title"] for boton in botones]
+        """Envía Reply Buttons o List Message con sus límites de Meta."""
+        tipo = interactivo.get("type")
+        if tipo == "button":
+            botones = interactivo.get("action", {}).get("buttons", [])
+            if not 1 <= len(botones) <= 3:
+                raise ValueError(
+                    "Un menú de botones requiere entre uno y tres botones."
+                )
+            identificadores = [boton["reply"]["id"] for boton in botones]
+            titulos = [boton["reply"]["title"] for boton in botones]
+            limite_titulo = 20
+        elif tipo == "list":
+            filas = [
+                fila
+                for seccion in interactivo.get("action", {}).get("sections", [])
+                for fila in seccion.get("rows", [])
+            ]
+            if not 1 <= len(filas) <= 10:
+                raise ValueError("Una List Message requiere entre una y diez opciones.")
+            identificadores = [fila["id"] for fila in filas]
+            titulos = [fila["title"] for fila in filas]
+            limite_titulo = 24
+        else:
+            raise ValueError("Solo se admiten Reply Buttons y List Message.")
         if len(set(identificadores)) != len(identificadores) or any(
-            len(titulo) > 20 for titulo in titulos
+            len(titulo) > limite_titulo for titulo in titulos
         ):
-            raise ValueError("Los IDs deben ser únicos y los títulos de máximo 20 caracteres.")
+            raise ValueError(
+                "Los IDs deben ser únicos y los títulos exceden el límite de Meta."
+            )
 
         return await self._enviar_payload(
             {
